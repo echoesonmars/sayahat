@@ -379,13 +379,22 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
 
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#002b18]/20 via-transparent to-transparent mix-blend-multiply" />
 
-      <button
-        type="button"
-        onClick={togglePanels}
-        className="absolute right-4 top-4 z-[1000] rounded-full border border-white/60 bg-white/90 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[#006948] shadow-md transition hover:bg-white"
-      >
-        {panelsVisible ? 'Скрыть панели' : 'Показать панели'}
-      </button>
+      {/* Верхняя панель с кнопками и статусом */}
+      <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 z-[1000] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
+        {/* Статус локации */}
+        <div className="rounded-full bg-white/95 px-3 sm:px-4 py-1.5 sm:py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-[#006948] shadow-lg whitespace-nowrap">
+          {hasError ? 'не удалось получить геоданные' : isLocating ? 'определяем координаты...' : 'локация найдена'}
+        </div>
+
+        {/* Кнопка показать/скрыть панели */}
+        <button
+          type="button"
+          onClick={togglePanels}
+          className="rounded-full border border-white/60 bg-white/90 px-3 sm:px-4 py-1.5 sm:py-1 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-[#006948] shadow-md transition hover:bg-white whitespace-nowrap flex-shrink-0"
+        >
+          {panelsVisible ? 'Скрыть панели' : 'Показать панели'}
+        </button>
+      </div>
 
       {hasRoute && (
         <motion.div
@@ -398,16 +407,12 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
         />
       )}
 
-      <div className="absolute left-4 top-4 rounded-full bg-white/95 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#006948] shadow-lg">
-        {hasError ? 'не удалось получить геоданные' : isLocating ? 'определяем координаты...' : 'локация найдена'}
-      </div>
-
       {showHints ? (
-        <div className="mt-4 lg:mt-0 lg:absolute lg:right-4 lg:top-24 lg:w-[260px] rounded-2xl border border-[#006948]/10 bg-white/90 p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">подсказки</p>
+        <div className="absolute left-3 sm:left-4 right-3 sm:right-4 top-16 sm:top-20 lg:top-24 lg:right-4 lg:left-auto lg:w-[260px] z-[999] rounded-2xl border border-[#006948]/10 bg-white/90 p-3 sm:p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur">
+          <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.35em] text-[#00A36C]">подсказки</p>
           <ul className="mt-2 space-y-2 list-disc pl-4 text-[#0F2D1E]">
             {routePlan?.hints?.map((hint, index) => (
-              <li key={`hint-${index}`} className="text-xs leading-relaxed">
+              <li key={`hint-${index}`} className="text-[11px] sm:text-xs leading-relaxed break-words">
                 {hint}
               </li>
             ))}
@@ -416,22 +421,22 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
       ) : null}
 
       {showDetails && (
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:absolute lg:left-4 lg:bottom-4 lg:right-4">
+        <div className="absolute left-3 sm:left-4 right-3 sm:right-4 bottom-3 sm:bottom-4 z-[999] flex flex-col gap-3 sm:flex-row lg:right-4">
           {routePlan?.note && (
-            <div className="rounded-2xl border border-[#006948]/15 bg-white/85 p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur sm:flex-1">
-              <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">комментарий</p>
-              <p className="mt-2 leading-snug text-[#08331F]">{routePlan.note}</p>
+            <div className="rounded-2xl border border-[#006948]/15 bg-white/85 p-3 sm:p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur sm:flex-1">
+              <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.35em] text-[#00A36C]">комментарий</p>
+              <p className="mt-2 text-[12px] sm:text-sm leading-snug text-[#08331F] break-words">{routePlan.note}</p>
             </div>
           )}
 
           {routeStats && (
-            <div className="rounded-2xl border border-white/60 bg-white/85 p-4 text-[#0F2D1E] shadow-[0_20px_45px_rgba(0,0,0,0.12)] backdrop-blur sm:flex-1">
-              <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">следующая точка</p>
-              <p className="mt-2 text-2xl font-semibold tracking-[-0.05em]">
+            <div className="rounded-2xl border border-white/60 bg-white/85 p-3 sm:p-4 text-[#0F2D1E] shadow-[0_20px_45px_rgba(0,0,0,0.12)] backdrop-blur sm:flex-1">
+              <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.35em] text-[#00A36C]">следующая точка</p>
+              <p className="mt-2 text-xl sm:text-2xl font-semibold tracking-[-0.05em]">
                 {nextDistanceLabel} · {nextDurationLabel}
               </p>
-              <p className="mt-3 text-xs uppercase tracking-[0.35em] text-[#7A8C85]">маршрут целиком</p>
-              <p className="mt-1 text-sm font-semibold tracking-[-0.03em] text-[#08331F]">
+              <p className="mt-3 text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.35em] text-[#7A8C85]">маршрут целиком</p>
+              <p className="mt-1 text-xs sm:text-sm font-semibold tracking-[-0.03em] text-[#08331F]">
                 {totalDistanceLabel} · {totalDurationLabel}
               </p>
             </div>

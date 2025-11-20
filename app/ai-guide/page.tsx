@@ -1320,20 +1320,20 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
   };
 
   return (
-    <div className="mt-3 flex-1 space-y-4 overflow-y-auto pr-2 lg:min-h-0">
+    <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-2 sm:pr-2 lg:min-h-0">
       {/* SOS сигналы */}
       {sosAlerts.length > 0 && (
-        <div className="rounded-xl border-2 border-red-500 bg-red-50 p-4">
+        <div className="rounded-xl border-2 border-red-500 bg-red-50 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
+            <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0" />
             <h3 className="text-sm font-semibold text-red-600">SOS Сигналы</h3>
           </div>
           <div className="space-y-2">
             {sosAlerts.map((alert) => (
               <div key={alert._id} className="rounded-lg border border-red-200 bg-white p-3">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-red-600">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-red-600 break-words">
                       {alert.message}
                     </p>
                     <p className="text-xs text-[#7A7A7A] mt-1">
@@ -1345,7 +1345,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
                         onClick={() => openLocationOnMap(alert.location!.lat, alert.location!.lng)}
                         className="mt-2 text-xs text-[#006948] hover:underline flex items-center gap-1"
                       >
-                        <MapPinned className="h-3 w-3" />
+                        <MapPinned className="h-3 w-3 flex-shrink-0" />
                         Открыть на карте
                       </button>
                     )}
@@ -1356,7 +1356,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
                   <button
                     type="button"
                     onClick={() => handleMarkSOSRead(alert._id)}
-                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-700"
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-700 flex-shrink-0 self-start sm:self-auto"
                   >
                     Закрыть
                   </button>
@@ -1368,9 +1368,9 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
       )}
 
       {/* Секция уникального кода */}
-      <div className="rounded-xl border border-[#006948]/20 bg-white p-4">
+      <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Shield className="h-5 w-5 text-[#006948]" />
+          <Shield className="h-5 w-5 text-[#006948] flex-shrink-0" />
           <h3 className="text-sm font-semibold text-[#0F2D1E]">Ваш уникальный код</h3>
         </div>
         {isLoadingCode ? (
@@ -1378,14 +1378,14 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#006948] border-t-transparent" />
           </div>
         ) : safetyCode ? (
-          <div className="flex items-center gap-2">
-            <div className="flex-1 rounded-lg border-2 border-[#006948] bg-[#F4FFFA] px-4 py-3 text-center">
-              <span className="text-2xl font-bold tracking-widest text-[#006948]">{safetyCode}</span>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+            <div className="flex-1 rounded-lg border-2 border-[#006948] bg-[#F4FFFA] px-3 sm:px-4 py-3 text-center min-w-0">
+              <span className="text-xl sm:text-2xl font-bold tracking-widest text-[#006948] break-all">{safetyCode}</span>
             </div>
             <button
               type="button"
               onClick={copyCode}
-              className="rounded-lg border border-[#006948]/20 bg-white px-4 py-3 text-[#006948] transition hover:bg-[#F4FFFA]"
+              className="rounded-lg border border-[#006948]/20 bg-white px-4 py-3 text-[#006948] transition hover:bg-[#F4FFFA] flex items-center justify-center flex-shrink-0"
             >
               {codeCopied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
             </button>
@@ -1399,22 +1399,22 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
       </div>
 
       {/* Секция добавления контакта */}
-      <div className="rounded-xl border border-[#006948]/20 bg-white p-4">
+      <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <h3 className="text-sm font-semibold text-[#0F2D1E] mb-3">Добавить контакт по коду</h3>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
             value={inputCode}
             onChange={(e) => setInputCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
             placeholder="Введите 6-значный код"
             maxLength={6}
-            className="flex-1 rounded-lg border border-[#006948]/20 px-3 py-2 text-sm text-[#0F2D1E] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none uppercase tracking-widest"
+            className="flex-1 rounded-lg border border-[#006948]/20 px-3 py-2 text-sm text-[#0F2D1E] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none uppercase tracking-widest min-w-0"
           />
           <button
             type="button"
             onClick={handleAddContact}
             disabled={isAddingContact || inputCode.length !== 6}
-            className="rounded-lg bg-[#00A36C] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#00c77f] disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-lg bg-[#00A36C] px-4 py-2 text-sm font-medium text-white transition hover:bg-[#00c77f] disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
           >
             {isAddingContact ? '...' : 'Добавить'}
           </button>
@@ -1422,7 +1422,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
       </div>
 
       {/* Список контактов */}
-      <div className="rounded-xl border border-[#006948]/20 bg-white p-4">
+      <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <h3 className="text-sm font-semibold text-[#0F2D1E] mb-3">Мои контакты безопасности</h3>
         {isLoadingContacts ? (
           <div className="flex items-center justify-center py-8">
@@ -1444,22 +1444,22 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
                   exit={{ opacity: 0, y: -10 }}
                   className="rounded-lg border border-[#006948]/10 bg-[#F4FFFA] p-3"
                 >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{contact.isOwner ? '👁️' : '📍'}</span>
-                        <div>
-                          <h4 className="text-sm font-semibold text-[#0F2D1E]">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        <span className="text-lg flex-shrink-0">{contact.isOwner ? '👁️' : '📍'}</span>
+                        <div className="min-w-0 flex-1">
+                          <h4 className="text-sm font-semibold text-[#0F2D1E] break-words">
                             {contact.otherUser?.name || 'Неизвестный'}
                           </h4>
-                          <p className="text-xs text-[#7A7A7A]">
+                          <p className="text-xs text-[#7A7A7A] mt-1 break-words">
                             {contact.isOwner 
                               ? 'Может видеть ваше местоположение' 
                               : 'Вы можете видеть местоположение'}
                           </p>
                           {contact.lastLocation ? (
                             <div className="mt-1">
-                              <p className="text-xs text-[#93A39C]">
+                              <p className="text-xs text-[#93A39C] break-words">
                                 Последнее обновление: {formatDate(contact.lastLocation.timestamp)}
                               </p>
                               <button
@@ -1467,7 +1467,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
                                 onClick={() => openLocationOnMap(contact.lastLocation!.lat, contact.lastLocation!.lng)}
                                 className="mt-1 text-xs text-[#006948] hover:underline flex items-center gap-1"
                               >
-                                <MapPinned className="h-3 w-3" />
+                                <MapPinned className="h-3 w-3 flex-shrink-0" />
                                 Открыть на карте
                               </button>
                             </div>
@@ -1479,22 +1479,22 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 flex-shrink-0 self-start sm:self-auto">
                       {!contact.isOwner && (
                         <button
                           type="button"
                           onClick={() => handleSOS(contact._id)}
-                          className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-600 flex items-center gap-1"
+                          className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-red-600 flex items-center gap-1 whitespace-nowrap"
                         >
-                          <AlertTriangle className="h-3 w-3" />
-                          SOS
+                          <AlertTriangle className="h-3 w-3 flex-shrink-0" />
+                          <span className="hidden sm:inline">SOS</span>
                         </button>
                       )}
                       {contact.isOwner && (
                         <button
                           type="button"
                           onClick={() => handleDeleteContact(contact._id)}
-                          className="rounded-lg p-1.5 text-[#7A7A7A] transition hover:bg-red-50 hover:text-red-600"
+                          className="rounded-lg p-1.5 text-[#7A7A7A] transition hover:bg-red-50 hover:text-red-600 flex-shrink-0"
                         >
                           <X className="h-4 w-4" />
                         </button>
