@@ -13,7 +13,7 @@ import type {
   RouteInstruction,
   RouteStats,
 } from '@/lib/geo';
-import { DEFAULT_CENTER_COORDS, DEFAULT_DESTINATION_COORDS, computeRouteStats } from '@/lib/geo';
+import { DEFAULT_CENTER_COORDS, computeRouteStats } from '@/lib/geo';
 
 type WindowWithLeaflet = Window & { L: typeof L };
 
@@ -61,7 +61,6 @@ const defaultIcon = L.divIcon({
 });
 
 const DEFAULT_CENTER: LatLngExpression = [DEFAULT_CENTER_COORDS.lat, DEFAULT_CENTER_COORDS.lng];
-const DEFAULT_DESTINATION: LatLngExpression = [DEFAULT_DESTINATION_COORDS.lat, DEFAULT_DESTINATION_COORDS.lng];
 const MARKER_COLORS = ['#00A36C', '#F59E0B', '#2563EB', '#EF4444', '#7C3AED'];
 
 function MapRelocator({ position }: { position: LatLngExpression | null }) {
@@ -139,11 +138,6 @@ function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
   return null;
 }
 
-function toTuple(coords?: Coordinates | null): LatLngExpression | null {
-  if (!coords) return null;
-  if (typeof coords.lat === 'number' && typeof coords.lng === 'number') return [coords.lat, coords.lng];
-  return null;
-}
 
 function normalizeLatLng(position: LatLngExpression | null): LatLngExpression | null {
   if (!position) return null;
@@ -213,7 +207,7 @@ function createWaypointIcon(label: string, color: string) {
   });
 }
 
-function createContactIcon(name: string) {
+function createContactIcon() {
   return L.divIcon({
     className: '',
     html: `
@@ -370,7 +364,7 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
             minute: '2-digit',
           });
           return (
-            <Marker key={contact.id} position={contactPosition} icon={createContactIcon(contact.name)}>
+            <Marker key={contact.id} position={contactPosition} icon={createContactIcon()}>
               <Popup>
                 <span className="font-semibold">{contact.name}</span>
                 <br />

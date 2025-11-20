@@ -1,6 +1,6 @@
 'use client';
 
-import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Phone, Copy, Check, X, MessageSquare, List, Map } from 'lucide-react';
+import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Copy, Check, X, MessageSquare, List, Map } from 'lucide-react';
 import { AnimatePresence, motion, Variants } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import type { LatLngExpression } from 'leaflet';
@@ -1507,7 +1507,7 @@ function SearchTab() {
     distanceKm?: number;
     lat: number;
     lng: number;
-    tags?: any;
+    tags?: Record<string, unknown>;
     price_kzt?: number;
   }>>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -1648,9 +1648,12 @@ function SearchTab() {
                         <span className="text-[#006948] font-medium">{result.price_kzt} ₸</span>
                       )}
                     </div>
-                    {result.tags?.['addr:place'] && (
-                      <p className="mt-1 text-xs text-[#93A39C]">{result.tags['addr:place']}</p>
-                    )}
+                    {(() => {
+                      const addrPlace = result.tags?.['addr:place'];
+                      return typeof addrPlace === 'string' && addrPlace && (
+                        <p className="mt-1 text-xs text-[#93A39C]">{addrPlace}</p>
+                      );
+                    })()}
                   </div>
                   <button
                     type="button"
@@ -1808,15 +1811,6 @@ export default function AIGuidePage() {
       router.push('/auth/signin');
     }
   }, [status, router]);
-
-  const sendButtonVariants: Variants = useMemo(
-    () => ({
-      hover: { scale: 1.05, boxShadow: '0 12px 30px rgba(0, 199, 127, 0.4)' },
-      tap: { scale: 0.92 },
-      idle: { scale: 1 },
-    }),
-    [],
-  );
 
   function generateId() {
     if (typeof crypto !== 'undefined') {
@@ -1992,7 +1986,7 @@ export default function AIGuidePage() {
         });
         
         if (response.ok) {
-          const data = await response.json();
+          await response.json();
           const aiMessage: Message = {
             id: generateId(),
             author: 'ai',
@@ -2043,7 +2037,7 @@ export default function AIGuidePage() {
         });
         
         if (response.ok) {
-          const data = await response.json();
+          await response.json();
           const aiMessage: Message = {
             id: generateId(),
             author: 'ai',
@@ -2374,7 +2368,7 @@ export default function AIGuidePage() {
                 isLocating={isLocating}
                 hasError={geoError}
                 routePlan={routePlan}
-                contacts={safetyContacts}
+                contacts={safetyContacts.filter(c => c.location !== null) as Array<{ id: string; name: string; location: { lat: number; lng: number; timestamp: string } }>}
               />
             </div>
           </div>

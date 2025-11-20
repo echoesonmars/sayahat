@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { Menu, X, User, LogOut } from "lucide-react";
 import { Ribbon } from 'lucide-react';
-import { TextAnimate } from "@/components/ui/text-animate";
 import { useSession, signOut } from "next-auth/react";
 import Link from "next/link";
 

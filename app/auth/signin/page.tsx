@@ -38,7 +38,7 @@ function SignInForm() {
         router.push('/ai-guide');
         router.refresh();
       }
-    } catch (error) {
+    } catch {
       setError('Произошла ошибка при входе');
     } finally {
       setIsLoading(false);

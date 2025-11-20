@@ -8,7 +8,7 @@ export async function GET() {
   try {
     const session = await getServerSession(authOptions);
     return NextResponse.json({ session });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ session: null });
   }
 }

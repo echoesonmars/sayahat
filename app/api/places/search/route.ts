@@ -11,7 +11,7 @@ type PlaceFromTowns = {
   lon: number;
   category?: string[];
   tags?: {
-    [key: string]: any;
+    [key: string]: unknown;
     shop?: string;
     name?: string;
     'addr:place'?: string;
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     console.log('[Places Search] Query:', { query, cityId, lat, lng, limit, category });
 
     // Получаем города из коллекции towns
-    let townsQuery: any = {};
+    const townsQuery: { _id?: unknown } = {};
     if (cityId) {
       const { ObjectId } = await import('mongodb');
       if (ObjectId.isValid(cityId)) {
@@ -112,7 +112,7 @@ export async function GET(request: NextRequest) {
           let tagsMatch = false;
           if (placeTags && typeof placeTags === 'object') {
             // Проверяем все значения в тегах
-            tagsMatch = Object.values(placeTags).some((val: any) => {
+            tagsMatch = Object.values(placeTags).some((val: unknown) => {
               if (val === null || val === undefined) return false;
               return String(val).toLowerCase().includes(searchLower);
             });
@@ -181,7 +181,19 @@ export async function GET(request: NextRequest) {
 
     // Вычисляем расстояние, если есть координаты
     let enrichedPlaces = allPlaces.map((place) => {
-      const result: any = {
+      const result: {
+        id: string;
+        name: string;
+        lat: number;
+        lng: number;
+        city: string;
+        cityId: string;
+        category: string[];
+        tags: Record<string, unknown>;
+        price_kzt?: number;
+        stars?: number;
+        distanceKm?: number;
+      } = {
         id: place.id || `place_${place.cityId}_${Math.random().toString(36).substr(2, 9)}`,
         name: place.name || 'Без названия',
         lat: place.lat,

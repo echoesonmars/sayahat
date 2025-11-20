@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
         // Собираем примеры категорий мест
         const categories = new Set<string>();
         if (Array.isArray(places)) {
-          places.slice(0, 50).forEach((place: any) => {
+          places.slice(0, 50).forEach((place: { category?: string[] }) => {
             if (place.category && Array.isArray(place.category)) {
               place.category.forEach((cat: string) => categories.add(cat));
             }

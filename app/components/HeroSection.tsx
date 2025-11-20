@@ -1,4 +1,3 @@
-import { FlipWords } from "@/components/ui/flip-words";
 import { TextAnimate } from "@/components/ui/text-animate";
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button"
 import { BlurFade } from "@/components/ui/blur-fade"

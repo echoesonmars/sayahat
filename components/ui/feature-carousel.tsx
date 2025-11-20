@@ -56,7 +56,6 @@ interface FeatureCarouselProps extends CardProps {
   step2img1Class?: string
   step2img2Class?: string
   step3imgClass?: string
-  step4imgClass?: string
   image: ImageSet
 }
 
@@ -275,7 +274,7 @@ const stepVariants: Variants = {
 
 const StepImage = forwardRef<
   HTMLImageElement,
-  StepImageProps & { [key: string]: any }
+  StepImageProps & { [key: string]: unknown }
 >(
   (
     { src, alt, className, style, width = 1200, height = 630, ...props },
@@ -552,7 +551,6 @@ export function FeatureCarousel({
   step2img1Class = defaultClasses.step2img1,
   step2img2Class = defaultClasses.step2img2,
   step3imgClass = defaultClasses.step3img,
-  step4imgClass = defaultClasses.step4img,
   ...props
 }: FeatureCarouselProps) {
   const { currentNumber: step, increment } = useNumberCycler()
