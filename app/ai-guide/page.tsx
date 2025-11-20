@@ -630,8 +630,10 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
           {savedPlans.map((plan) => (
             (() => {
               // Проверяем, есть ли места с координатами
-              const locationsWithCoords = (plan.locations || []).filter((loc: any) => 
-                loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+              type LocationWithCoords = { lat: number; lng: number; name?: string };
+              const locationsWithCoords = (plan.locations || []).filter((loc: unknown): loc is LocationWithCoords => 
+                loc !== null && typeof loc === 'object' && 'lat' in loc && 'lng' in loc &&
+                typeof (loc as LocationWithCoords).lat === 'number' && typeof (loc as LocationWithCoords).lng === 'number'
               );
               const canOpenOnMap = locationsWithCoords.length > 0;
 
@@ -646,8 +648,8 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{plan.title}</h3>
-                      {(plan as any).description && (
-                        <p className="mt-1 text-xs text-[#7A7A7A] line-clamp-2">{(plan as any).description}</p>
+                      {('description' in plan && typeof plan.description === 'string') && (
+                        <p className="mt-1 text-xs text-[#7A7A7A] line-clamp-2">{plan.description}</p>
                       )}
                       <div className="mt-2 flex items-center gap-4 text-xs text-[#7A7A7A]">
                         <span className="flex items-center gap-1">
@@ -671,7 +673,7 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                             const lastLocation = locationsWithCoords[locationsWithCoords.length - 1] as { lat: number; lng: number; name?: string };
                             
                             // Если есть несколько мест, используем первое как начало, последнее как конец, остальные как via
-                            const viaPoints = locationsWithCoords.slice(1, -1).map((loc: any) => ({
+                            const viaPoints = locationsWithCoords.slice(1, -1).map((loc) => ({
                               lat: loc.lat,
                               lng: loc.lng,
                             }));
@@ -682,7 +684,7 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                                 destination: { lat: lastLocation.lat, lng: lastLocation.lng },
                                 via: viaPoints.length > 0 ? viaPoints : undefined,
                                 note: `Маршрут: ${plan.title}`,
-                                hints: locationsWithCoords.map((loc: any, index: number) => ({
+                                hints: locationsWithCoords.map((loc, index: number) => ({
                                   instruction: `${index + 1}. ${loc.name || 'Место'}`,
                                   distance: 0,
                                   time: 0,
@@ -698,7 +700,7 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                           Открыть на карте
                         </button>
                       )}
-                      {!canOpenOnMap && plan.locations && (plan.locations as any[]).length > 0 && (
+                      {!canOpenOnMap && plan.locations && Array.isArray(plan.locations) && plan.locations.length > 0 && (
                         <p className="mt-2 text-xs text-[#93A39C] italic">
                           ⚠️ У мест в этом плане нет координат. Попросите AI-гид добавить координаты.
                         </p>
@@ -1610,7 +1612,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   const [searchError, setSearchError] = useState<string | null>(null);
   const [avgPrice, setAvgPrice] = useState<number | undefined>(undefined);
 
-  const router = useRouter();
+  // const router = useRouter(); // Не используется в SearchTab
 
   // Получаем местоположение пользователя
   useEffect(() => {
@@ -2262,7 +2264,7 @@ function AIGuidePageContent() {
     const destinationName = searchParams.get('destinationName');
     const latParam = searchParams.get('lat');
     const lngParam = searchParams.get('lng');
-    const nameParam = searchParams.get('name');
+    // const nameParam = searchParams.get('name'); // Пока не используется
 
     if (routeParam === 'true' && destinationLat && destinationLng) {
       // Строим маршрут
@@ -2279,6 +2281,7 @@ function AIGuidePageContent() {
           note: destinationName || 'Маршрут к выбранному месту',
         };
         setRoutePlan(newRoute);
+        setRouteKey(prev => prev + 1);
         // Переключаемся на вкладку с картой
         setActiveTab('plans');
         // Очищаем параметры URL
@@ -2546,6 +2549,7 @@ function AIGuidePageContent() {
       // Set route plan if exists
       if (routePlan) {
         setRoutePlan(routePlan);
+        setRouteKey(prev => prev + 1);
       }
 
       // Save plan if parsed from AI response
@@ -2555,17 +2559,20 @@ function AIGuidePageContent() {
           
           // Если в плане есть места с координатами, строим маршрут автоматически
           if (parsedPlan.locations && Array.isArray(parsedPlan.locations) && parsedPlan.locations.length > 0) {
-            const locationsWithCoords = parsedPlan.locations.filter((loc: any) => 
-              loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+            type LocationWithCoords = { lat: number; lng: number; name?: string };
+            const locationsWithCoords = parsedPlan.locations.filter((loc: unknown): loc is LocationWithCoords => 
+              loc !== null && typeof loc === 'object' && 'lat' in loc && 'lng' in loc &&
+              typeof (loc as LocationWithCoords).lat === 'number' && typeof (loc as LocationWithCoords).lng === 'number'
             );
             
             if (locationsWithCoords.length > 0) {
               const firstLocation = locationsWithCoords[0] as { lat: number; lng: number; name?: string };
               const lastLocation = locationsWithCoords[locationsWithCoords.length - 1] as { lat: number; lng: number; name?: string };
-              const viaPoints = locationsWithCoords.slice(1, -1).map((loc: any) => ({
-                lat: loc.lat,
-                lng: loc.lng,
-              }));
+              const viaPoints: Coordinates[] = locationsWithCoords.slice(1, -1)
+                .map((loc) => ({ lat: loc.lat, lng: loc.lng }))
+                .filter((point): point is Coordinates => 
+                  typeof point.lat === 'number' && typeof point.lng === 'number'
+                );
 
               // Строим маршрут из мест плана
               // Используем текущее местоположение пользователя как начало, если доступно
@@ -2573,7 +2580,8 @@ function AIGuidePageContent() {
               if (position && Array.isArray(position) && position.length === 2) {
                 origin = { lat: position[0], lng: position[1] };
               } else if (position && typeof position === 'object' && 'lat' in position && 'lng' in position) {
-                origin = { lat: (position as any).lat, lng: (position as any).lng };
+                const pos = position as { lat: number; lng: number };
+                origin = { lat: pos.lat, lng: pos.lng };
               } else {
                 // Если нет текущего местоположения, используем первое место как начало
                 origin = { lat: firstLocation.lat, lng: firstLocation.lng };
@@ -2584,7 +2592,7 @@ function AIGuidePageContent() {
                 destination: { lat: lastLocation.lat, lng: lastLocation.lng },
                 via: viaPoints.length > 0 ? viaPoints : undefined,
                 note: `Маршрут: ${parsedPlan.title}`,
-                hints: locationsWithCoords.map((loc: any, index: number) => ({
+                hints: locationsWithCoords.map((loc, index: number) => ({
                   instruction: `${index + 1}. ${loc.name || 'Место'}`,
                   distance: 0,
                   time: 0,
@@ -2595,7 +2603,6 @@ function AIGuidePageContent() {
               // Устанавливаем маршрут на карте
               setRoutePlan(planRoute);
               setRouteKey(prev => prev + 1);
-              
               // Переключаемся на вкладку с картой для просмотра маршрута
               setActiveTab('plans');
               
@@ -2615,8 +2622,10 @@ function AIGuidePageContent() {
             setRefreshTrigger((prev) => prev + 1);
             
             const locationsCount = parsedPlan.locations?.length || 0;
-            const locationsWithCoordsCount = parsedPlan.locations?.filter((loc: any) => 
-              loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+            type LocationWithCoords = { lat: number; lng: number; name?: string };
+            const locationsWithCoordsCount = parsedPlan.locations?.filter((loc: unknown): loc is LocationWithCoords => 
+              loc !== null && typeof loc === 'object' && 'lat' in loc && 'lng' in loc &&
+              typeof (loc as LocationWithCoords).lat === 'number' && typeof (loc as LocationWithCoords).lng === 'number'
             ).length || 0;
             
             let saveMessageText = `✅ План "${parsedPlan.title}" сохранен!`;
@@ -2831,9 +2840,8 @@ function AIGuidePageContent() {
                     >
                       <SearchTab 
                         onRouteBuild={(route) => {
-                          // Заменяем старый маршрут новым и обновляем ключ для принудительного обновления карты
                           setRoutePlan(route);
-                          setRouteKey(prev => prev + 1); // Увеличиваем ключ, чтобы карта обновилась
+                          setRouteKey(prev => prev + 1);
                           // Остаемся на табе поиск мест
                         }}
                       />

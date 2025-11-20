@@ -133,7 +133,14 @@ function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
   }, [map]);
 
   useEffect(() => {
-    if (waypoints.length < 2) return;
+    if (waypoints.length < 2) {
+      // Если нет достаточно точек, удаляем маршрут
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
+      return;
+    }
 
     if (typeof window !== 'undefined') {
       (window as WindowWithLeaflet).L = L;
@@ -144,6 +151,12 @@ function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
     (async () => {
       await import('leaflet-routing-machine');
       if (isCancelled || !L.Routing) return;
+
+      // Удаляем старый маршрут перед созданием нового
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
 
       const routingWaypoints: L.Routing.Waypoint[] = waypoints.map((point) => L.Routing.waypoint(L.latLng(point)));
 
@@ -163,16 +176,17 @@ function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
         createMarker: () => null,
       };
 
-      if (!routingControlRef.current) {
-        routingControlRef.current = L.Routing.control(routingOptions).addTo(map);
-        return;
-      }
-
-      routingControlRef.current.getPlan().setWaypoints(routingWaypoints);
+      // Создаем новый маршрут
+      routingControlRef.current = L.Routing.control(routingOptions).addTo(map);
     })();
 
     return () => {
       isCancelled = true;
+      // Очищаем при размонтировании
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
     };
   }, [map, waypoints]);
 
@@ -353,8 +367,9 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
 
         {hasRoute && routedWaypoints.length >= 2 && (
           <>
-            <RoutingMachine waypoints={routedWaypoints} />
+            <RoutingMachine key={routeAnimationKey} waypoints={routedWaypoints} />
             <Polyline
+              key={routeAnimationKey}
               positions={routedWaypoints}
               pathOptions={{
                 color: '#00C77F',
@@ -455,7 +470,14 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
           <ul className="mt-2 space-y-2 list-disc pl-4 text-[#0F2D1E]">
             {routePlan?.hints?.map((hint, index) => {
               // Поддерживаем как строки, так и объекты
-              const hintText = typeof hint === 'string' ? hint : (hint?.instruction || String(hint));
+              let hintText: string;
+              if (typeof hint === 'string') {
+                hintText = hint;
+              } else if (hint && typeof hint === 'object' && 'instruction' in hint) {
+                hintText = String((hint as { instruction: string }).instruction);
+              } else {
+                hintText = String(hint);
+              }
               return (
                 <li key={`hint-${index}`} className="text-[11px] sm:text-xs leading-relaxed break-words">
                   {hintText}

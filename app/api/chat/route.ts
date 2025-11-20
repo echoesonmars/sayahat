@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
     // Получаем все города или конкретный город
     const cityIds = mentionedCity 
       ? Object.entries(CITY_NAMES)
-          .filter(([_, name]) => name === mentionedCity)
+          .filter(([, name]) => name === mentionedCity)
           .map(([id]) => id)
       : Object.keys(CITY_NAMES);
     
@@ -149,17 +149,17 @@ export async function POST(request: NextRequest) {
         const cityName = CITY_NAMES[cityId] || city.name || city.Name || city.meta?.name || 'Неизвестный город';
         
         if (Array.isArray(places)) {
-          places.slice(0, 100).forEach((place: any) => {
-            if (place && typeof place === 'object') {
-              allPlaces.push({
-                name: place.name || place.Name || 'Без названия',
-                city: cityName,
-                category: place.category || place.Category || [],
-                tags: place.tags || place.Tags || {},
-                lat: place.lat || place.Lat || place.latitude || place.Latitude,
-                lng: place.lon || place.Lon || place.longitude || place.Longitude || place.lng || place.Lng,
-              });
-            }
+          places.slice(0, 100).forEach((place: unknown) => {
+            if (!place || typeof place !== 'object') return;
+            const placeObj = place as Record<string, unknown>;
+            allPlaces.push({
+              name: (placeObj.name || placeObj.Name || 'Без названия') as string,
+              city: cityName,
+              category: (placeObj.category || placeObj.Category || []) as string[],
+              tags: (placeObj.tags || placeObj.Tags || {}) as Record<string, unknown>,
+              lat: (placeObj.lat || placeObj.Lat || placeObj.latitude || placeObj.Latitude) as number | undefined,
+              lng: (placeObj.lon || placeObj.Lon || placeObj.longitude || placeObj.Longitude || placeObj.lng || placeObj.Lng) as number | undefined,
+            });
           });
         }
       }

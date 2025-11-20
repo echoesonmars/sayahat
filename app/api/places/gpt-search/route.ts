@@ -23,6 +23,7 @@ type PlaceFromTowns = {
   price_kzt?: number;
   stars?: number;
   city?: string;
+  distanceKm?: number;
 };
 
 export async function POST(request: NextRequest) {
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
         city: p.city,
         category: p.category || [],
         tags: relevantTags,
-        distanceKm: p.distanceKm ? `${p.distanceKm.toFixed(1)} км` : 'не указано',
+        distanceKm: p.distanceKm !== undefined ? `${p.distanceKm.toFixed(1)} км` : 'не указано',
         price_kzt: p.price_kzt,
         stars: p.stars,
       };
@@ -256,7 +257,7 @@ ${mentionedCity ? `3. Находятся в городе "${mentionedCity}"` : '
         
         if (gptText) {
           // Извлекаем JSON массив
-          const jsonMatch = gptText.match(/\[.*\]/s);
+          const jsonMatch = gptText.match(/\[[\s\S]*\]/);
           if (jsonMatch) {
             const selectedIds = JSON.parse(jsonMatch[0]);
             

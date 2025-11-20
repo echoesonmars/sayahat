@@ -3,12 +3,14 @@ export type Coordinates = {
   lng: number;
 };
 
+export type RouteHint = string | { instruction: string; distance?: number; time?: number; sign?: number };
+
 export type RouteInstruction = {
   origin?: Coordinates;
   destination: Coordinates;
   via?: Coordinates[];
   note?: string;
-  hints?: string[];
+  hints?: RouteHint[];
 };
 
 export type RouteSegmentStat = {

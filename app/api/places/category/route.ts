@@ -334,7 +334,7 @@ ${JSON.stringify(
           if (gptText) {
             try {
               // Пытаемся извлечь JSON из ответа
-              const jsonMatch = gptText.match(/\[.*\]/s);
+              const jsonMatch = gptText.match(/\[[\s\S]*\]/);
               const selectedIds = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
               
               if (Array.isArray(selectedIds) && selectedIds.length > 0) {
