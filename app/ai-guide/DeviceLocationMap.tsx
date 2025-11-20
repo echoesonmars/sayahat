@@ -1,0 +1,448 @@
+'use client';
+
+import 'leaflet/dist/leaflet.css';
+import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
+
+import { Circle, MapContainer, Marker, Popup, TileLayer, Polyline, useMap } from 'react-leaflet';
+import { motion } from 'framer-motion';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import L, { LatLngExpression } from 'leaflet';
+import type {} from 'leaflet-routing-machine';
+import type {
+  Coordinates,
+  RouteInstruction,
+  RouteStats,
+} from '@/lib/geo';
+import { DEFAULT_CENTER_COORDS, DEFAULT_DESTINATION_COORDS, computeRouteStats } from '@/lib/geo';
+
+type WindowWithLeaflet = Window & { L: typeof L };
+
+type ContactLocation = {
+  id: string;
+  name: string;
+  location: { lat: number; lng: number; timestamp: string };
+};
+
+type DeviceLocationMapProps = {
+  position: LatLngExpression | null;
+  isLocating: boolean;
+  hasError: boolean;
+  routePlan?: RouteInstruction | null;
+  contacts?: ContactLocation[];
+};
+
+const defaultIcon = L.divIcon({
+  className: '',
+  html: `
+    <span style="
+      width:42px;
+      height:42px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border-radius:50%;
+      background:radial-gradient(circle at 30% 30%, #ffffff 0%, #d8fff1 60%, #00a36c 100%);
+      box-shadow:0 10px 25px rgba(0,163,108,0.35);
+      border:2px solid #ffffff;
+    ">
+      <span style="
+        width:12px;
+        height:12px;
+        border-radius:50%;
+        background:#006948;
+        box-shadow:0 0 0 6px rgba(0,163,108,0.2);
+        display:block;
+      "></span>
+    </span>
+  `,
+  iconSize: [42, 42],
+  iconAnchor: [21, 21],
+  popupAnchor: [0, -24],
+});
+
+const DEFAULT_CENTER: LatLngExpression = [DEFAULT_CENTER_COORDS.lat, DEFAULT_CENTER_COORDS.lng];
+const DEFAULT_DESTINATION: LatLngExpression = [DEFAULT_DESTINATION_COORDS.lat, DEFAULT_DESTINATION_COORDS.lng];
+const MARKER_COLORS = ['#00A36C', '#F59E0B', '#2563EB', '#EF4444', '#7C3AED'];
+
+function MapRelocator({ position }: { position: LatLngExpression | null }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, 13, { duration: 1.2 });
+    }
+  }, [map, position]);
+
+  return null;
+}
+
+type RoutingControl = L.Routing.Control;
+type RoutingControlOptionsWithMarker = L.Routing.RoutingControlOptions & {
+  createMarker?: (index: number, waypoint: L.Routing.Waypoint, total: number) => L.Marker | null;
+};
+
+function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
+  const map = useMap();
+  const routingControlRef = useRef<RoutingControl | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (routingControlRef.current) {
+        map.removeControl(routingControlRef.current);
+        routingControlRef.current = null;
+      }
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (waypoints.length < 2) return;
+
+    (window as WindowWithLeaflet).L = L;
+
+    let isCancelled = false;
+
+    (async () => {
+      await import('leaflet-routing-machine');
+      if (isCancelled || !L.Routing) return;
+
+      const routingWaypoints: L.Routing.Waypoint[] = waypoints.map((point) => L.Routing.waypoint(L.latLng(point)));
+
+      const routingOptions: RoutingControlOptionsWithMarker = {
+        waypoints: routingWaypoints,
+        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
+        lineOptions: {
+          styles: [{ color: '#00A36C', weight: 5, opacity: 0.85 }],
+          extendToWaypoints: true,
+          missingRouteTolerance: 10,
+        },
+        addWaypoints: false,
+        fitSelectedRoutes: false,
+        show: false,
+        routeWhileDragging: false,
+        collapsible: true,
+        createMarker: () => null,
+      };
+
+      if (!routingControlRef.current) {
+        routingControlRef.current = L.Routing.control(routingOptions).addTo(map);
+        return;
+      }
+
+      routingControlRef.current.getPlan().setWaypoints(routingWaypoints);
+    })();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [map, waypoints]);
+
+  return null;
+}
+
+function toTuple(coords?: Coordinates | null): LatLngExpression | null {
+  if (!coords) return null;
+  if (typeof coords.lat === 'number' && typeof coords.lng === 'number') return [coords.lat, coords.lng];
+  return null;
+}
+
+function normalizeLatLng(position: LatLngExpression | null): LatLngExpression | null {
+  if (!position) return null;
+  if (Array.isArray(position)) return position;
+  const candidate = position as { lat?: number; lng?: number };
+  if (typeof candidate.lat === 'number' && typeof candidate.lng === 'number') {
+    return [candidate.lat, candidate.lng];
+  }
+  return null;
+}
+
+function latLngToCoords(value: LatLngExpression | null): Coordinates | null {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    const [lat, lng] = value;
+    return { lat, lng };
+  }
+  const anyValue = value as { lat?: number; lng?: number };
+  if (typeof anyValue.lat === 'number' && typeof anyValue.lng === 'number') {
+    return { lat: anyValue.lat, lng: anyValue.lng };
+  }
+  return null;
+}
+
+function coordsEqual(a: Coordinates | null, b: Coordinates | null) {
+  if (!a || !b) return false;
+  return Number(a.lat.toFixed(5)) === Number(b.lat.toFixed(5)) && Number(a.lng.toFixed(5)) === Number(b.lng.toFixed(5));
+}
+
+function formatDistance(km: number | undefined) {
+  if (typeof km !== 'number' || Number.isNaN(km)) return '—';
+  return `${km.toFixed(1)} км`;
+}
+
+function formatDuration(hours: number | undefined) {
+  if (typeof hours !== 'number' || Number.isNaN(hours)) return '—';
+  if (hours < 1) {
+    return `${Math.round(hours * 60)} мин`;
+  }
+  return `${hours.toFixed(1)} ч`;
+}
+
+function createWaypointIcon(label: string, color: string) {
+  return L.divIcon({
+    className: '',
+    html: `
+      <span style="
+        width:32px;
+        height:32px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        background:${color};
+        color:#fff;
+        font-weight:600;
+        font-size:13px;
+        box-shadow:0 10px 25px rgba(0,0,0,0.2);
+        border:2px solid #fff;
+      ">
+        ${label}
+      </span>
+    `,
+    iconSize: [32, 32],
+    iconAnchor: [16, 32],
+    popupAnchor: [0, -28],
+  });
+}
+
+function createContactIcon(name: string) {
+  return L.divIcon({
+    className: '',
+    html: `
+      <span style="
+        width:36px;
+        height:36px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:50%;
+        background:radial-gradient(circle at 30% 30%, #ffffff 0%, #fff4e6 60%, #f59e0b 100%);
+        box-shadow:0 10px 25px rgba(245,158,11,0.35);
+        border:2px solid #ffffff;
+      ">
+        <span style="
+          width:14px;
+          height:14px;
+          border-radius:50%;
+          background:#f59e0b;
+          box-shadow:0 0 0 6px rgba(245,158,11,0.2);
+          display:block;
+        "></span>
+      </span>
+    `,
+    iconSize: [36, 36],
+    iconAnchor: [18, 18],
+    popupAnchor: [0, -20],
+  });
+}
+
+export function DeviceLocationMap({ position, isLocating, hasError, routePlan, contacts = [] }: DeviceLocationMapProps) {
+  const normalizedPosition = normalizeLatLng(position);
+  const userCoords = latLngToCoords(normalizedPosition) ?? DEFAULT_CENTER_COORDS;
+  const hasRoute = Boolean(routePlan && routePlan.destination);
+  const [panelsVisible, setPanelsVisible] = useState(true);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setPanelsVisible(false);
+    }
+  }, []);
+
+  const togglePanels = () => setPanelsVisible((prev) => !prev);
+
+  const routeCoordinates = useMemo<Coordinates[]>(() => {
+    if (!hasRoute) return [];
+    const coordsList: Coordinates[] = [];
+    const origin = userCoords;
+    coordsList.push(origin);
+
+    const viaPoints = routePlan?.via?.filter((stop): stop is Coordinates => Boolean(stop?.lat && stop?.lng));
+    if (viaPoints?.length) {
+      coordsList.push(...viaPoints);
+    }
+
+    const destination = routePlan?.destination ?? origin;
+    if (!coordsEqual(origin, destination)) {
+      coordsList.push(destination);
+    }
+
+    return coordsList;
+  }, [hasRoute, routePlan, userCoords]);
+
+  const routedWaypoints = useMemo<LatLngExpression[]>(() => {
+    if (!routeCoordinates.length) return [];
+    return routeCoordinates.map((coords) => [coords.lat, coords.lng]);
+  }, [routeCoordinates]);
+
+  const routeStats = useMemo<RouteStats | null>(() => {
+    if (routeCoordinates.length < 2) return null;
+    return computeRouteStats(routeCoordinates);
+  }, [routeCoordinates]);
+
+  const nextLeg = routeStats?.segments[0];
+  const totalDistanceLabel = formatDistance(routeStats?.totalKm);
+  const totalDurationLabel = formatDuration(routeStats?.totalHours);
+  const nextDistanceLabel = formatDistance(nextLeg?.distanceKm);
+  const nextDurationLabel = formatDuration(nextLeg?.durationHours);
+
+  const routeAnimationKey = hasRoute ? JSON.stringify(routePlan) : 'no-route';
+  const showHints = panelsVisible && Boolean(routePlan?.hints?.length);
+  const showDetails = panelsVisible && Boolean(routePlan?.note || routeStats);
+
+  return (
+    <div className="relative h-full w-full overflow-hidden rounded-3xl border border-[#006948]/15 bg-[#F4FFFA] shadow-[0_25px_80px_rgba(0,105,72,0.08)] min-h-[420px] sm:min-h-[520px] lg:min-h-[360px]">
+      <MapContainer
+        center={normalizedPosition ?? routedWaypoints[0] ?? DEFAULT_CENTER}
+        zoom={normalizedPosition ? 13 : 6}
+        scrollWheelZoom
+        className="h-full w-full grayscale-[0.05] contrast-[1.05] saturate-[1.05]"
+        zoomControl={false}
+      >
+        <TileLayer
+          attribution='&copy; OpenStreetMap contributors &copy; CARTO'
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+        />
+
+        <MapRelocator position={position} />
+
+        {hasRoute && routedWaypoints.length >= 2 && (
+          <>
+            <RoutingMachine waypoints={routedWaypoints} />
+            <Polyline
+              positions={routedWaypoints}
+              pathOptions={{
+                color: '#00C77F',
+                weight: 4,
+                opacity: 0.45,
+                dashArray: '8 10',
+                lineCap: 'round',
+              }}
+            />
+          </>
+        )}
+
+        {hasRoute &&
+          routedWaypoints.map((point, index) => {
+            const color = MARKER_COLORS[index % MARKER_COLORS.length];
+            const label = String.fromCharCode(65 + index);
+            const icon = createWaypointIcon(label, color);
+            const isLast = index === routedWaypoints.length - 1;
+            const title = isLast ? 'Финиш маршрута' : index === 0 ? 'Старт маршрута' : `Точка ${label}`;
+            return (
+              <Marker key={`waypoint-${label}`} position={point} icon={icon}>
+                <Popup>
+                  <span className="font-semibold">{title}</span>
+                  <br />
+                  Координаты: {routeCoordinates[index]?.lat.toFixed(3)}, {routeCoordinates[index]?.lng.toFixed(3)}
+                </Popup>
+              </Marker>
+            );
+          })}
+
+        {normalizedPosition && (
+          <>
+            <Marker position={normalizedPosition} icon={defaultIcon}>
+              <Popup>
+                <span className="font-semibold">Вы здесь</span>
+                <br />
+                {hasRoute ? 'Маршрут обновлён с учётом вашей точки.' : 'Постройте маршрут, чтобы увидеть путь от вашей точки.'}
+              </Popup>
+            </Marker>
+            <Circle center={normalizedPosition} radius={900} pathOptions={{ color: '#00d592', fillOpacity: 0.12 }} />
+          </>
+        )}
+
+        {contacts.map((contact) => {
+          if (!contact.location) return null;
+          const contactPosition: LatLngExpression = [contact.location.lat, contact.location.lng];
+          const timestamp = new Date(contact.location.timestamp).toLocaleString('ru-RU', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+          });
+          return (
+            <Marker key={contact.id} position={contactPosition} icon={createContactIcon(contact.name)}>
+              <Popup>
+                <span className="font-semibold">{contact.name}</span>
+                <br />
+                <span className="text-xs text-gray-600">Обновлено: {timestamp}</span>
+              </Popup>
+            </Marker>
+          );
+        })}
+      </MapContainer>
+
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#002b18]/20 via-transparent to-transparent mix-blend-multiply" />
+
+      <button
+        type="button"
+        onClick={togglePanels}
+        className="absolute right-4 top-4 z-[1000] rounded-full border border-white/60 bg-white/90 px-4 py-1 text-xs font-semibold uppercase tracking-[0.3em] text-[#006948] shadow-md transition hover:bg-white"
+      >
+        {panelsVisible ? 'Скрыть панели' : 'Показать панели'}
+      </button>
+
+      {hasRoute && (
+        <motion.div
+          key={routeAnimationKey}
+          className="pointer-events-none absolute left-0 top-0 h-1 bg-gradient-to-r from-[#00D592] via-[#00A36C] to-[#00724E]"
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
+          style={{ transformOrigin: 'left center' }}
+        />
+      )}
+
+      <div className="absolute left-4 top-4 rounded-full bg-white/95 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.3em] text-[#006948] shadow-lg">
+        {hasError ? 'не удалось получить геоданные' : isLocating ? 'определяем координаты...' : 'локация найдена'}
+      </div>
+
+      {showHints ? (
+        <div className="mt-4 lg:mt-0 lg:absolute lg:right-4 lg:top-24 lg:w-[260px] rounded-2xl border border-[#006948]/10 bg-white/90 p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">подсказки</p>
+          <ul className="mt-2 space-y-2 list-disc pl-4 text-[#0F2D1E]">
+            {routePlan?.hints?.map((hint, index) => (
+              <li key={`hint-${index}`} className="text-xs leading-relaxed">
+                {hint}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {showDetails && (
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row lg:mt-0 lg:absolute lg:left-4 lg:bottom-4 lg:right-4">
+          {routePlan?.note && (
+            <div className="rounded-2xl border border-[#006948]/15 bg-white/85 p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur sm:flex-1">
+              <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">комментарий</p>
+              <p className="mt-2 leading-snug text-[#08331F]">{routePlan.note}</p>
+            </div>
+          )}
+
+          {routeStats && (
+            <div className="rounded-2xl border border-white/60 bg-white/85 p-4 text-[#0F2D1E] shadow-[0_20px_45px_rgba(0,0,0,0.12)] backdrop-blur sm:flex-1">
+              <p className="text-xs uppercase tracking-[0.35em] text-[#00A36C]">следующая точка</p>
+              <p className="mt-2 text-2xl font-semibold tracking-[-0.05em]">
+                {nextDistanceLabel} · {nextDurationLabel}
+              </p>
+              <p className="mt-3 text-xs uppercase tracking-[0.35em] text-[#7A8C85]">маршрут целиком</p>
+              <p className="mt-1 text-sm font-semibold tracking-[-0.03em] text-[#08331F]">
+                {totalDistanceLabel} · {totalDurationLabel}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+

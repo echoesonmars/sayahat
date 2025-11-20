@@ -1,0 +1,33 @@
+{
+  "bsonType": "object",
+  "required": [
+    "email",
+    "password",
+    "name",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "email": {
+      "bsonType": "string"
+    },
+    "password": {
+      "bsonType": "string"
+    },
+    "name": {
+      "bsonType": "string"
+    },
+    "createdAt": {
+      "bsonType": "date"
+    },
+    "updatedAt": {
+      "bsonType": "date"
+    },
+    "safetyCode": {
+      "bsonType": "string",
+      "pattern": "^[A-Z0-9]{6}$",
+      "description": "Уникальный 6-значный код безопасности"
+    }
+  }
+}
+

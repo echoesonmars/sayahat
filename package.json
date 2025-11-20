@@ -9,18 +9,39 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@tabler/icons-react": "^3.35.0",
+    "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dotted-map": "^2.2.3",
+    "framer-motion": "^12.23.24",
+    "icons-react": "^3.7.1",
+    "leaflet": "^1.9.4",
+    "leaflet-routing-machine": "^3.2.12",
+    "lucide-react": "^0.553.0",
+    "mongodb": "^7.0.0",
+    "motion": "^12.23.24",
+    "next": "14.2.33",
+    "next-auth": "^4.24.13",
+    "next-themes": "^0.4.6",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.33"
+    "react-leaflet": "^4.2.1",
+    "react-wrap-balancer": "^1.1.1",
+    "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/leaflet": "^1.9.21",
+    "@types/leaflet-routing-machine": "^3.2.9",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.33",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.33"
+    "typescript": "^5"
   }
 }
