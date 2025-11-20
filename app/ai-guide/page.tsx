@@ -9,7 +9,8 @@ import type { LatLngExpression } from 'leaflet';
 import nextDynamic from 'next/dynamic';
 import type { Coordinates, RouteInstruction } from '@/lib/geo';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
 // Динамический импорт DeviceLocationMap, чтобы избежать SSR проблем с window
 const DeviceLocationMap = nextDynamic(() => import('./DeviceLocationMap').then(mod => ({ default: mod.DeviceLocationMap })), {
@@ -363,7 +364,7 @@ function PlansTab({
   );
 }
 
-function SharedPlansTab({ refreshTrigger }: { refreshTrigger?: number }) {
+function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: number; onRouteBuild?: (route: RouteInstruction) => void }) {
   const [savedPlans, setSavedPlans] = useState<Array<{ _id: string; title: string; date: string; locations?: Array<unknown> }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -627,38 +628,93 @@ function SharedPlansTab({ refreshTrigger }: { refreshTrigger?: number }) {
       {savedPlans.length > 0 && (
         <AnimatePresence>
           {savedPlans.map((plan) => (
-            <motion.div
-              key={plan._id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{plan.title}</h3>
-                  <div className="mt-2 flex items-center gap-4 text-xs text-[#7A7A7A]">
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {plan.date || 'Без даты'}
-                    </span>
-                    {plan.locations && (
-                      <span className="flex items-center gap-1">
-                        <MapPinned className="h-3 w-3" />
-                        {plan.locations.length} локаций
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleDeletePlan(plan._id)}
-                  className="ml-2 rounded-lg p-2 text-[#7A7A7A] transition hover:bg-[#F4FFFA] hover:text-[#006948]"
+            (() => {
+              // Проверяем, есть ли места с координатами
+              const locationsWithCoords = (plan.locations || []).filter((loc: any) => 
+                loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+              );
+              const canOpenOnMap = locationsWithCoords.length > 0;
+
+              return (
+                <motion.div
+                  key={plan._id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            </motion.div>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{plan.title}</h3>
+                      {(plan as any).description && (
+                        <p className="mt-1 text-xs text-[#7A7A7A] line-clamp-2">{(plan as any).description}</p>
+                      )}
+                      <div className="mt-2 flex items-center gap-4 text-xs text-[#7A7A7A]">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="h-3 w-3" />
+                          {plan.date || 'Без даты'}
+                        </span>
+                        {plan.locations && (
+                          <span className="flex items-center gap-1">
+                            <MapPinned className="h-3 w-3" />
+                            {plan.locations.length} локаций
+                            {canOpenOnMap && ` (${locationsWithCoords.length} с координатами)`}
+                          </span>
+                        )}
+                      </div>
+                      {canOpenOnMap && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Строим маршрут из всех мест плана
+                            const firstLocation = locationsWithCoords[0] as { lat: number; lng: number; name?: string };
+                            const lastLocation = locationsWithCoords[locationsWithCoords.length - 1] as { lat: number; lng: number; name?: string };
+                            
+                            // Если есть несколько мест, используем первое как начало, последнее как конец, остальные как via
+                            const viaPoints = locationsWithCoords.slice(1, -1).map((loc: any) => ({
+                              lat: loc.lat,
+                              lng: loc.lng,
+                            }));
+
+                            if (onRouteBuild) {
+                              const route: RouteInstruction = {
+                                origin: { lat: firstLocation.lat, lng: firstLocation.lng },
+                                destination: { lat: lastLocation.lat, lng: lastLocation.lng },
+                                via: viaPoints.length > 0 ? viaPoints : undefined,
+                                note: `Маршрут: ${plan.title}`,
+                                hints: locationsWithCoords.map((loc: any, index: number) => ({
+                                  instruction: `${index + 1}. ${loc.name || 'Место'}`,
+                                  distance: 0,
+                                  time: 0,
+                                  sign: 0,
+                                })),
+                              };
+                              onRouteBuild(route);
+                            }
+                          }}
+                          className="mt-3 w-full rounded-lg bg-[#006948] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#008A6A] flex items-center justify-center gap-2"
+                        >
+                          <MapPinned className="h-3 w-3" />
+                          Открыть на карте
+                        </button>
+                      )}
+                      {!canOpenOnMap && plan.locations && (plan.locations as any[]).length > 0 && (
+                        <p className="mt-2 text-xs text-[#93A39C] italic">
+                          ⚠️ У мест в этом плане нет координат. Попросите AI-гид добавить координаты.
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePlan(plan._id)}
+                      className="ml-2 rounded-lg p-2 text-[#7A7A7A] transition hover:bg-[#F4FFFA] hover:text-[#006948]"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              );
+            })()
           ))}
         </AnimatePresence>
       )}
@@ -1511,8 +1567,29 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
   );
 }
 
-function SearchTab() {
+const CATEGORIES = [
+  { id: 'attraction', label: 'Достопримечательности', icon: '🏛️' },
+  { id: 'nature', label: 'Природа', icon: '🌲' },
+  { id: 'food', label: 'Еда и напитки', icon: '🍽️' },
+  { id: 'hotels', label: 'Отели', icon: '🏨' },
+  { id: 'shopping', label: 'Шоппинг', icon: '🛍️' },
+  { id: 'transport', label: 'Транспорт', icon: '🚌' },
+  { id: 'safety', label: 'Безопасность', icon: '🛡️' },
+  { id: 'services', label: 'Услуги', icon: '🏦' },
+];
+
+const CITIES = [
+  { id: 'all', label: 'Все города', icon: '🌍' },
+  { id: 'Алматы', label: 'Алматы', icon: '🏙️' },
+  { id: 'Шымкент', label: 'Шымкент', icon: '🏛️' },
+  { id: 'Астана', label: 'Астана', icon: '🏗️' },
+];
+
+function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) => void }) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCity, setSelectedCity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [searchResults, setSearchResults] = useState<Array<{
     id: string;
     name: string;
@@ -1523,9 +1600,17 @@ function SearchTab() {
     lng: number;
     tags?: Record<string, unknown>;
     price_kzt?: number;
+    opening_hours?: string;
+    phone?: string;
+    website?: string;
+    email?: string;
   }>>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [avgPrice, setAvgPrice] = useState<number | undefined>(undefined);
+
+  const router = useRouter();
 
   // Получаем местоположение пользователя
   useEffect(() => {
@@ -1544,59 +1629,121 @@ function SearchTab() {
     }
   }, []);
 
-  // Поиск с задержкой (debounce)
+  // Загрузка мест по категории или текстовому запросу
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!selectedCategory && !searchQuery.trim()) {
       setSearchResults([]);
+      setIsSearching(false);
+      setSearchError(null);
+      setAvgPrice(undefined);
       return;
     }
 
-    const timeoutId = setTimeout(async () => {
-      setIsSearching(true);
-      try {
-        const params = new URLSearchParams({
-          q: searchQuery.trim(),
-          limit: '20',
-        });
+    // Сбрасываем результаты при смене города
+    if (selectedCategory) {
+      setSearchResults([]);
+    }
 
-        if (userLocation) {
-          params.append('lat', userLocation.lat.toString());
-          params.append('lng', userLocation.lng.toString());
+    setIsSearching(true);
+    setSearchError(null);
+
+    const fetchPlaces = async () => {
+      try {
+        let response: Response;
+        
+        if (selectedCategory) {
+          // Поиск по категории
+          const params = new URLSearchParams({
+            category: selectedCategory,
+            limit: '15',
+          });
+
+          // Добавляем фильтр по городу, если выбран
+          if (selectedCity !== 'all') {
+            // Для API нужно передать cityId, но мы можем фильтровать на клиенте или передать название города
+            // Пока передаем как параметр, который API может использовать для фильтрации
+            params.append('city', selectedCity);
+          }
+
+          if (userLocation) {
+            params.append('lat', userLocation.lat.toString());
+            params.append('lng', userLocation.lng.toString());
+          }
+
+          console.log('[SearchTab] Fetching category:', selectedCategory);
+
+          response = await fetch(`/api/places/category?${params.toString()}`, {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+        } else {
+          // Поиск через GPT по текстовому запросу
+          console.log('[SearchTab] Fetching GPT search:', searchQuery);
+
+          response = await fetch('/api/places/gpt-search', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              query: searchQuery.trim(),
+              limit: 15,
+              ...(userLocation && {
+                lat: userLocation.lat,
+                lng: userLocation.lng,
+              }),
+            }),
+          });
         }
 
-        const response = await fetch(`/api/places/search?${params.toString()}`);
+        if (!response.ok) {
+          let errorMessage = 'Ошибка при загрузке мест';
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.error || errorMessage;
+          } catch {
+            const errorText = await response.text();
+            console.error('[SearchTab] Error response:', errorText);
+          }
+          setSearchError(errorMessage);
+          setSearchResults([]);
+          setIsSearching(false);
+          return;
+        }
+
         const data = await response.json();
 
         console.log('[SearchTab] Search response:', {
           ok: response.ok,
-          status: response.status,
-          hasPlaces: !!data.places,
-          placesCount: data.places?.length || 0,
-          total: data.total || 0,
-          query: searchQuery,
+          category: data.category,
+          placesCount: Array.isArray(data.places) ? data.places.length : 0,
+          avgPrice: data.avgPrice,
         });
 
-        if (response.ok && data.places) {
+        if (response.ok && Array.isArray(data.places)) {
           setSearchResults(data.places);
+          setAvgPrice(data.avgPrice);
         } else {
-          console.warn('[SearchTab] Search failed or no results:', data);
           setSearchResults([]);
         }
       } catch (error) {
-        console.error('Search error:', error);
+        console.error('[SearchTab] Fetch error:', error);
+        if (error instanceof Error) {
+          setSearchError(`Ошибка: ${error.message}`);
+        } else {
+          setSearchError('Произошла ошибка при загрузке мест');
+        }
         setSearchResults([]);
       } finally {
         setIsSearching(false);
       }
-    }, 300); // Задержка 300ms
+    };
 
+    const timeoutId = setTimeout(fetchPlaces, selectedCategory ? 0 : 500); // Debounce для текстового поиска
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, userLocation]);
-
-  const formatCategory = (categories: string[] | undefined) => {
-    if (!categories || categories.length === 0) return 'Место';
-    return categories[0].charAt(0).toUpperCase() + categories[0].slice(1);
-  };
+  }, [selectedCategory, selectedCity, searchQuery, userLocation]);
 
   const formatDistance = (distanceKm?: number) => {
     if (!distanceKm) return null;
@@ -1604,86 +1751,299 @@ function SearchTab() {
     return `${distanceKm.toFixed(1)} км`;
   };
 
+  const calculateMinutes = (distanceKm?: number) => {
+    if (!distanceKm) return null;
+    // Примерная скорость 50 км/ч для расчета времени
+    const minutes = Math.round((distanceKm / 50) * 60);
+    return minutes;
+  };
+
+  const [routeNotification, setRouteNotification] = useState<string | null>(null);
+
+  const handleViewOnMap = (place: typeof searchResults[0]) => {
+    // Переключаемся на вкладку с картой и центрируем на месте
+    if (onRouteBuild && userLocation) {
+      const route: RouteInstruction = {
+        destination: {
+          lat: place.lat,
+          lng: place.lng,
+        },
+        origin: userLocation,
+        note: `Просмотр места: ${place.name}`,
+      };
+      onRouteBuild(route);
+      setRouteNotification(`Маршрут к "${place.name}" построен. Переключитесь на вкладку "AI-гид" чтобы увидеть карту.`);
+      setTimeout(() => setRouteNotification(null), 5000);
+    }
+  };
+
+  const handleBuildRoute = (place: typeof searchResults[0]) => {
+    // Строим маршрут - старый маршрут автоматически заменяется новым
+    if (onRouteBuild && userLocation) {
+      const route: RouteInstruction = {
+        destination: {
+          lat: place.lat,
+          lng: place.lng,
+        },
+        origin: userLocation,
+        note: `Маршрут к: ${place.name}`,
+      };
+      // Заменяем старый маршрут новым
+      onRouteBuild(route);
+      setRouteNotification(`Маршрут к "${place.name}" построен. Переключитесь на вкладку "AI-гид" чтобы увидеть карту.`);
+      setTimeout(() => setRouteNotification(null), 5000);
+    }
+  };
+
+  const selectedCategoryLabel = CATEGORIES.find(c => c.id === selectedCategory)?.label;
+
   return (
-    <div className="mt-3 flex-1 flex flex-col lg:min-h-0">
-      <div className="mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93A39C]" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск интересных мест..."
-            className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none"
-          />
-          {isSearching && (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#006948] border-t-transparent"></div>
+    <div className="mt-3 flex-1 flex flex-col lg:min-h-0 h-full min-h-0 overflow-hidden">
+      {/* Кнопка выбора категории */}
+      <div className="mb-4 flex-shrink-0">
+        <button
+          type="button"
+          onClick={() => setShowCategoryModal(true)}
+          className="w-full rounded-xl border border-[#006948]/20 bg-white px-4 py-3 text-left transition hover:border-[#006948]/40 hover:bg-[#F4FFFA]/50 flex items-center justify-between"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{selectedCategory ? CATEGORIES.find(c => c.id === selectedCategory)?.icon : '📂'}</span>
+            <div className="flex-1">
+              <p className="text-xs text-[#7A7A7A]">Категория</p>
+              <p className="text-sm font-medium text-[#0F2D1E]">
+                {selectedCategoryLabel || 'Выберите категорию'}
+              </p>
+              {selectedCategory && selectedCity !== 'all' && (
+                <p className="text-xs text-[#93A39C] mt-1">
+                  {CITIES.find(c => c.id === selectedCity)?.label}
+                </p>
+              )}
             </div>
-          )}
+          </div>
+          <svg className="h-5 w-5 text-[#7A7A7A]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        {/* Поле поиска */}
+        <div className="mt-3">
+          <p className="text-xs text-[#7A7A7A] mb-2 text-center">или</p>
+          <p className="text-xs text-[#7A7A7A] mb-2 text-center">поищите написав что вы хотите и где</p>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93A39C] flex-shrink-0" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSelectedCategory(null); // Сбрасываем категорию при вводе текста
+              }}
+              placeholder="Например: ресторан в Алматы, музей в Шымкенте..."
+              className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20"
+            />
+            {isSearching && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#006948] border-t-transparent"></div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-      <div className="flex-1 space-y-3 overflow-y-auto pr-2">
-        {!searchQuery.trim() ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
-            <Search className="h-12 w-12 text-[#006948]/30" />
-            <p className="mt-4 text-sm text-[#7A7A7A]">Начните поиск интересных мест</p>
-            <p className="mt-2 text-xs text-[#93A39C]">Поиск по названию, тегам и категориям</p>
+
+      {/* Модальное окно выбора категорий */}
+      <AnimatePresence>
+        {showCategoryModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowCategoryModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-2xl rounded-2xl border border-[#006948]/20 bg-white shadow-xl relative z-[10000]"
+            >
+            <div className="border-b border-[#006948]/10 p-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold tracking-[-0.03em] text-[#0F2D1E]">
+                  Выберите категорию
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="rounded-lg p-2 text-[#7A7A7A] transition hover:bg-[#F4FFFA] hover:text-[#006948]"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6">
+              {/* Выбор города */}
+              <div className="mb-6">
+                <p className="text-xs uppercase tracking-[0.3em] text-[#00A36C] mb-3">Выберите город</p>
+                <div className="flex gap-2">
+                  {CITIES.map((city) => (
+                    <button
+                      key={city.id}
+                      type="button"
+                      onClick={() => setSelectedCity(city.id)}
+                      className={`flex-1 rounded-xl border p-3 text-center transition ${
+                        selectedCity === city.id
+                          ? 'border-[#006948] bg-[#F4FFFA] text-[#006948]'
+                          : 'border-[#006948]/20 bg-white text-[#0F2D1E] hover:border-[#006948]/40 hover:bg-[#F4FFFA]/50'
+                      }`}
+                    >
+                      <div className="text-2xl mb-1">{city.icon}</div>
+                      <div className="text-xs font-medium tracking-[-0.02em]">{city.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Выбор категории */}
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-[#00A36C] mb-3">Выберите категорию</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {CATEGORIES.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCategory(cat.id);
+                        setSearchQuery(''); // Сбрасываем текстовый поиск
+                        setShowCategoryModal(false);
+                      }}
+                      className={`rounded-xl border p-4 text-center transition ${
+                        selectedCategory === cat.id
+                          ? 'border-[#006948] bg-[#F4FFFA] text-[#006948]'
+                          : 'border-[#006948]/20 bg-white text-[#0F2D1E] hover:border-[#006948]/40 hover:bg-[#F4FFFA]/50'
+                      }`}
+                    >
+                      <div className="text-3xl mb-2">{cat.icon}</div>
+                      <div className="text-xs font-medium tracking-[-0.02em]">{cat.label}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Результаты */}
+      <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-2 sm:pr-2 min-h-0 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {routeNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="rounded-lg border border-[#006948]/20 bg-[#F4FFFA] p-3 text-sm text-[#006948]"
+          >
+            {routeNotification}
+          </motion.div>
+        )}
+        {searchError && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+            {searchError}
           </div>
-        ) : searchResults.length === 0 && !isSearching ? (
-          <div className="flex h-full flex-col items-center justify-center text-center">
+        )}
+
+        {!selectedCategory && !searchQuery.trim() ? (
+          <div className="flex h-full flex-col items-center justify-center text-center py-8">
+            <Search className="h-12 w-12 text-[#006948]/30" />
+            <p className="mt-4 text-sm text-[#7A7A7A]">Выберите категорию или введите запрос</p>
+            <p className="mt-2 text-xs text-[#93A39C]">GPT обработает запрос и найдет лучшие места</p>
+          </div>
+        ) : isSearching ? (
+          <div className="flex h-full flex-col items-center justify-center text-center py-8">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#006948] border-t-transparent"></div>
+            <p className="mt-4 text-sm text-[#7A7A7A]">Ищем лучшие места...</p>
+          </div>
+        ) : searchResults.length === 0 && !searchError ? (
+          <div className="flex h-full flex-col items-center justify-center text-center py-8">
             <Search className="h-12 w-12 text-[#006948]/30" />
             <p className="mt-4 text-sm text-[#7A7A7A]">Ничего не найдено</p>
-            <p className="mt-2 text-xs text-[#93A39C]">Попробуйте другой запрос</p>
+            <p className="mt-2 text-xs text-[#93A39C]">Попробуйте другую категорию</p>
           </div>
-        ) : (
-          <AnimatePresence>
-            {searchResults.map((result) => (
-              <motion.div
-                key={result.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{result.name}</h3>
-                    <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-[#7A7A7A]">
-                      <span>{formatCategory(result.category)}</span>
-                      {result.city && <span>{result.city}</span>}
-                      {result.distanceKm && (
-                        <span className="flex items-center gap-1">
-                          <MapPinned className="h-3 w-3" />
-                          {formatDistance(result.distanceKm)}
-                        </span>
-                      )}
-                      {result.price_kzt && (
-                        <span className="text-[#006948] font-medium">{result.price_kzt} ₸</span>
-                      )}
-                    </div>
-                    {(() => {
-                      const addrPlace = result.tags?.['addr:place'];
-                      return typeof addrPlace === 'string' && addrPlace && (
-                        <p className="mt-1 text-xs text-[#93A39C]">{addrPlace}</p>
-                      );
-                    })()}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      // Можно добавить логику добавления места в план
-                      console.log('Add place:', result);
-                    }}
-                    className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
+        ) : searchResults.length > 0 ? (
+          <>
+            {avgPrice && (
+              <div className="rounded-lg border border-[#006948]/10 bg-[#F4FFFA] p-3 text-center">
+                <p className="text-xs text-[#7A7A7A]">Средний прайс в категории</p>
+                <p className="text-lg font-semibold text-[#006948] mt-1">{avgPrice.toLocaleString()} ₸</p>
+              </div>
+            )}
+            <AnimatePresence>
+              {searchResults.map((result) => {
+                const minutes = calculateMinutes(result.distanceKm);
+                return (
+                  <motion.div
+                    key={result.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
                   >
-                    Добавить
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
+                    <div className="flex flex-col gap-3">
+                      <div>
+                        <h3 className="text-base font-semibold tracking-[-0.03em] text-[#0F2D1E] break-words">
+                          {result.name}
+                        </h3>
+                        {result.city && (
+                          <p className="text-xs text-[#7A7A7A] mt-1">{result.city}</p>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-[#7A7A7A]">
+                        {result.distanceKm && (
+                          <span className="flex items-center gap-1">
+                            <MapPinned className="h-3 w-3" />
+                            {formatDistance(result.distanceKm)}
+                            {minutes && ` · ~${minutes} мин`}
+                          </span>
+                        )}
+                        {result.price_kzt && (
+                          <span className="text-[#006948] font-medium">
+                            Средний прайс: {result.price_kzt.toLocaleString()} ₸
+                          </span>
+                        )}
+                      </div>
+
+                      {(() => {
+                        const addrPlace = result.tags?.['addr:place'];
+                        return typeof addrPlace === 'string' && addrPlace && (
+                          <p className="text-xs text-[#93A39C] break-words">{addrPlace}</p>
+                        );
+                      })()}
+
+                      <div className="flex flex-col sm:flex-row gap-2 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => handleViewOnMap(result)}
+                          className="flex-1 rounded-lg border border-[#006948]/20 bg-white px-4 py-2 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
+                        >
+                          Посмотреть на карте
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleBuildRoute(result)}
+                          className="flex-1 rounded-lg bg-[#006948] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#008A6A]"
+                        >
+                          Построить маршрут
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </>
+        ) : null}
       </div>
     </div>
   );
@@ -1745,9 +2105,10 @@ function TemplatesTab() {
   );
 }
 
-export default function AIGuidePage() {
+function AIGuidePageContent() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>(presetMessages);
   const [inputValue, setInputValue] = useState('');
   const [position, setPosition] = useState<LatLngExpression | null>(null);
@@ -1758,6 +2119,7 @@ export default function AIGuidePage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [routePlan, setRoutePlan] = useState<RouteInstruction | null>(null);
+  const [routeKey, setRouteKey] = useState(0); // Ключ для принудительного обновления маршрута
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [safetyContacts, setSafetyContacts] = useState<Array<{
     id: string;
@@ -1891,6 +2253,46 @@ export default function AIGuidePage() {
 
     return () => navigator.geolocation.clearWatch(watcherId);
   }, []);
+
+  // Обработка URL параметров для построения маршрута
+  useEffect(() => {
+    const routeParam = searchParams.get('route');
+    const destinationLat = searchParams.get('destinationLat');
+    const destinationLng = searchParams.get('destinationLng');
+    const destinationName = searchParams.get('destinationName');
+    const latParam = searchParams.get('lat');
+    const lngParam = searchParams.get('lng');
+    const nameParam = searchParams.get('name');
+
+    if (routeParam === 'true' && destinationLat && destinationLng) {
+      // Строим маршрут
+      if (position) {
+        const newRoute: RouteInstruction = {
+          destination: {
+            lat: Number(destinationLat),
+            lng: Number(destinationLng),
+          },
+          origin: {
+            lat: Array.isArray(position) ? position[0] : (position as { lat: number; lng: number }).lat,
+            lng: Array.isArray(position) ? position[1] : (position as { lat: number; lng: number }).lng,
+          },
+          note: destinationName || 'Маршрут к выбранному месту',
+        };
+        setRoutePlan(newRoute);
+        // Переключаемся на вкладку с картой
+        setActiveTab('plans');
+        // Очищаем параметры URL
+        router.replace('/ai-guide');
+      }
+    } else if (latParam && lngParam) {
+      // Показываем место на карте
+      const mapPosition: LatLngExpression = [Number(latParam), Number(lngParam)];
+      setPosition(mapPosition);
+      setActiveTab('plans');
+      // Очищаем параметры URL
+      router.replace('/ai-guide');
+    }
+  }, [searchParams, position, router]);
 
   const activeHelper = chatTabs.find((tab) => tab.id === activeTab)?.helper;
 
@@ -2150,6 +2552,57 @@ export default function AIGuidePage() {
       if (parsedPlan) {
         try {
           console.log('Saving plan from AI response...', parsedPlan);
+          
+          // Если в плане есть места с координатами, строим маршрут автоматически
+          if (parsedPlan.locations && Array.isArray(parsedPlan.locations) && parsedPlan.locations.length > 0) {
+            const locationsWithCoords = parsedPlan.locations.filter((loc: any) => 
+              loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+            );
+            
+            if (locationsWithCoords.length > 0) {
+              const firstLocation = locationsWithCoords[0] as { lat: number; lng: number; name?: string };
+              const lastLocation = locationsWithCoords[locationsWithCoords.length - 1] as { lat: number; lng: number; name?: string };
+              const viaPoints = locationsWithCoords.slice(1, -1).map((loc: any) => ({
+                lat: loc.lat,
+                lng: loc.lng,
+              }));
+
+              // Строим маршрут из мест плана
+              // Используем текущее местоположение пользователя как начало, если доступно
+              let origin: { lat: number; lng: number };
+              if (position && Array.isArray(position) && position.length === 2) {
+                origin = { lat: position[0], lng: position[1] };
+              } else if (position && typeof position === 'object' && 'lat' in position && 'lng' in position) {
+                origin = { lat: (position as any).lat, lng: (position as any).lng };
+              } else {
+                // Если нет текущего местоположения, используем первое место как начало
+                origin = { lat: firstLocation.lat, lng: firstLocation.lng };
+              }
+              
+              const planRoute: RouteInstruction = {
+                origin,
+                destination: { lat: lastLocation.lat, lng: lastLocation.lng },
+                via: viaPoints.length > 0 ? viaPoints : undefined,
+                note: `Маршрут: ${parsedPlan.title}`,
+                hints: locationsWithCoords.map((loc: any, index: number) => ({
+                  instruction: `${index + 1}. ${loc.name || 'Место'}`,
+                  distance: 0,
+                  time: 0,
+                  sign: 0,
+                })),
+              };
+              
+              // Устанавливаем маршрут на карте
+              setRoutePlan(planRoute);
+              setRouteKey(prev => prev + 1);
+              
+              // Переключаемся на вкладку с картой для просмотра маршрута
+              setActiveTab('plans');
+              
+              console.log('Route built from plan locations:', planRoute);
+            }
+          }
+          
           const planResponse = await fetch('/api/plans', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2160,11 +2613,24 @@ export default function AIGuidePage() {
             const planData = await planResponse.json();
             console.log('Plan saved successfully:', planData);
             setRefreshTrigger((prev) => prev + 1);
-            // Добавляем сообщение о сохранении
+            
+            const locationsCount = parsedPlan.locations?.length || 0;
+            const locationsWithCoordsCount = parsedPlan.locations?.filter((loc: any) => 
+              loc && typeof loc === 'object' && typeof loc.lat === 'number' && typeof loc.lng === 'number'
+            ).length || 0;
+            
+            let saveMessageText = `✅ План "${parsedPlan.title}" сохранен!`;
+            if (locationsWithCoordsCount > 0) {
+              saveMessageText += ` Маршрут из ${locationsWithCoordsCount} мест открыт на карте.`;
+            } else if (locationsCount > 0) {
+              saveMessageText += ` В плане ${locationsCount} мест, но нет координат.`;
+            }
+            saveMessageText += ` Найти план можно во вкладке "Мои планы".`;
+            
             const saveMessage: Message = {
               id: generateId(),
               author: 'ai',
-              text: `✅ План "${parsedPlan.title}" сохранен! Найти его можно во вкладке "Мои планы".`,
+              text: saveMessageText,
               timestamp: new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' }),
             };
             setMessages((prev) => [...prev, saveMessage]);
@@ -2282,7 +2748,7 @@ export default function AIGuidePage() {
             </div>
 
             <div className="mt-2 h-[60vh] overflow-hidden rounded-[24px] border border-[#006948]/15 bg-white p-4 lg:mt-4 lg:h-auto lg:flex-1 lg:overflow-hidden">
-              <div className="flex h-full flex-col lg:min-h-0">
+              <div className="flex h-full flex-col lg:min-h-0 overflow-hidden">
                 <div className="flex items-center gap-2 text-xs tracking-[-0.05em] text-[#7A7A7A]">
                   <MapPinned className="h-4 w-4 text-[#00A36C]" />
                   <span className="tracking-[-0.07em] text-[#2A3C36]">{activeHelper}</span>
@@ -2319,7 +2785,15 @@ export default function AIGuidePage() {
                       transition={{ duration: 0.2 }}
                       className="flex h-full flex-col lg:min-h-0"
                     >
-                      <SharedPlansTab refreshTrigger={refreshTrigger} />
+                      <SharedPlansTab 
+                        refreshTrigger={refreshTrigger}
+                        onRouteBuild={(route) => {
+                          setRoutePlan(route);
+                          setRouteKey(prev => prev + 1);
+                          // Переключаемся на вкладку с картой для просмотра маршрута
+                          setActiveTab('plans');
+                        }}
+                      />
                     </motion.div>
                   )}
                   {activeTab === 'notes' && (
@@ -2353,9 +2827,16 @@ export default function AIGuidePage() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
                       transition={{ duration: 0.2 }}
-                      className="flex h-full flex-col lg:min-h-0"
+                      className="flex h-full flex-col lg:min-h-0 overflow-hidden"
                     >
-                      <SearchTab />
+                      <SearchTab 
+                        onRouteBuild={(route) => {
+                          // Заменяем старый маршрут новым и обновляем ключ для принудительного обновления карты
+                          setRoutePlan(route);
+                          setRouteKey(prev => prev + 1); // Увеличиваем ключ, чтобы карта обновилась
+                          // Остаемся на табе поиск мест
+                        }}
+                      />
                     </motion.div>
                   )}
                   {activeTab === 'templates' && (
@@ -2378,6 +2859,7 @@ export default function AIGuidePage() {
           <div className="flex flex-col">
             <div className="min-h-[260px] rounded-xl border border-[#006948]/15 bg-white p-3 lg:flex-1 lg:min-h-0">
               <DeviceLocationMap
+                key={`map-${routeKey}`}
                 position={position}
                 isLocating={isLocating}
                 hasError={geoError}
@@ -2389,5 +2871,17 @@ export default function AIGuidePage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function AIGuidePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#006948] border-t-transparent" />
+      </div>
+    }>
+      <AIGuidePageContent />
+    </Suspense>
   );
 }

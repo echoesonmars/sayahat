@@ -20,6 +20,13 @@ const SYSTEM_PROMPT = `Ты — Sayahat, AI-гид по Казахстану. О
 1. Если пользователь просит СОХРАНИТЬ ПЛАН/МАРШРУТ (слова: сохрани, создай, добавь план) → в конце ответа добавь:
 <plan>{"title":"Название","date":"15 дек 2024","description":"описание","locations":[{"name":"Место","lat":43.2,"lng":76.8}]}</plan>
 
+КРИТИЧЕСКИ ВАЖНО ДЛЯ ПЛАНОВ:
+- ВСЕГДА добавляй координаты (lat и lng) для КАЖДОГО места в locations
+- Если пользователь просит добавить место в план, ОБЯЗАТЕЛЬНО найди его координаты из базы данных
+- Если места нет в базе данных, используй примерные координаты города (Алматы: 43.2220, 76.8512; Шымкент: 42.3419, 69.5901; Астана: 51.1694, 71.4491)
+- БЕЗ координат план нельзя будет открыть на карте - поэтому координаты ОБЯЗАТЕЛЬНЫ
+- Формат: {"name":"Название места","lat":43.2220,"lng":76.8512}
+
 2. Если пользователь просит СОХРАНИТЬ ЗАМЕТКУ/ЧЕК/ВАУЧЕР (слова: сохрани заметку, добавь в заметки, запомни, чек, ваучер) → в конце ответа добавь:
 <note>{"title":"Заголовок","content":"текст","type":"note"}</note>
 Тип: "receipt" для чеков, "voucher" для ваучеров, "note" для остального.
@@ -27,12 +34,21 @@ const SYSTEM_PROMPT = `Ты — Sayahat, AI-гид по Казахстану. О
 3. Для маршрута добавь в конце:
 <route>{"destination":{"lat":43.2,"lng":76.8},"origin":{"lat":...,"lng":...},"note":"описание"}</route>
 
-ИНФОРМАЦИЯ О ГОРОДАХ:
-- В базе данных есть информация о местах в Шымкенте и Алматы
-- Когда пользователь спрашивает о местах, ресторанах, достопримечательностях в этих городах, используй данные из базы
-- Можешь упоминать конкретные места, если они есть в базе данных
+РАБОТА С БАЗОЙ ДАННЫХ:
+- В базе данных есть информация о местах в Шымкенте, Алматы и Астане
+- ВСЕГДА сначала используй информацию из базы данных, если она есть
+- Когда пользователь спрашивает о местах, ресторанах, магазинах, достопримечательностях - используй конкретные места из базы
+- Упоминай названия мест, их категории и города из базы данных
+- Если в базе данных есть релевантные места - обязательно упомяни их в ответе
 
-ВАЖНО: Блоки <plan>, <note>, <route> добавляй ТОЛЬКО в самом конце, после всего текста. Внутри тегов только JSON, без текста.`;
+ПОИСК В ИНТЕРНЕТЕ:
+- Если информации нет в базе данных или её недостаточно - используй свои знания о Казахстане
+- Для общих вопросов о культуре, истории, традициях Казахстана используй свои знания
+- Для актуальной информации (события, новости) можешь упомянуть, что информация может быть устаревшей
+
+ВАЖНО: 
+- Блоки <plan>, <note>, <route> добавляй ТОЛЬКО в самом конце, после всего текста. Внутри тегов только JSON, без текста.
+- Приоритет: база данных → твои знания → общая информация`;
 
 export const runtime = 'nodejs';
 
@@ -71,43 +87,132 @@ export async function POST(request: NextRequest) {
   const coords = isValidCoordinates(body?.coords) ? body.coords : null;
   let locationContext = buildNearbyPlacesContext(coords);
 
-  // Получаем информацию о городах из БД для контекста AI
-  let citiesContext = '';
+  // Маппинг ObjectId на названия городов
+  const CITY_NAMES: Record<string, string> = {
+    '691c9b692f57d6e91156d18a': 'Шымкент',
+    '691c9b892f57d6e91156d18b': 'Алматы',
+    '691f5027819a19c6c6a57e12': 'Астана',
+  };
+
+  // Поиск мест в БД по запросу пользователя
+  let dbPlacesContext = '';
   try {
     const { db } = await connectToDatabase();
     const { ObjectId } = await import('mongodb');
     
-    // Получаем информацию о городах (Шымкент и Алматы)
-    const cityIds = [
-      '691c9b692f57d6e91156d18a', // Шымкент
-      '691c9b892f57d6e91156d18b', // Алматы
-    ];
+    // Извлекаем ключевые слова из запроса для поиска
+    const queryLower = prompt.toLowerCase();
+    const cityMentions: Record<string, string> = {
+      'алматы': 'Алматы',
+      'алмата': 'Алматы',
+      'алмате': 'Алматы',
+      'шымкент': 'Шымкент',
+      'шымкенте': 'Шымкент',
+      'астана': 'Астана',
+      'астане': 'Астана',
+      'астану': 'Астана',
+    };
+    
+    let mentionedCity: string | null = null;
+    for (const [key, value] of Object.entries(cityMentions)) {
+      if (queryLower.includes(key)) {
+        mentionedCity = value;
+        break;
+      }
+    }
+    
+    // Получаем все города или конкретный город
+    const cityIds = mentionedCity 
+      ? Object.entries(CITY_NAMES)
+          .filter(([_, name]) => name === mentionedCity)
+          .map(([id]) => id)
+      : Object.keys(CITY_NAMES);
     
     const cities = await db.collection('towns').find({
       _id: { $in: cityIds.map(id => new ObjectId(id)) }
     }).toArray();
     
     if (cities.length > 0) {
-      const citiesInfo = cities.map(city => {
-        const places = city.places || city.Places || city.data || [];
-        const placesCount = Array.isArray(places) ? places.length : 0;
-        const cityName = city.name || 'Неизвестный город';
+      const allPlaces: Array<{
+        name: string;
+        city: string;
+        category?: string[];
+        tags?: Record<string, unknown>;
+        lat?: number;
+        lng?: number;
+      }> = [];
+      
+      // Собираем все места из всех городов
+      for (const city of cities) {
+        const places = city.items || city.places || city.Places || city.data || [];
+        const cityId = city._id?.toString() || '';
+        const cityName = CITY_NAMES[cityId] || city.name || city.Name || city.meta?.name || 'Неизвестный город';
         
-        // Собираем примеры категорий мест
-        const categories = new Set<string>();
         if (Array.isArray(places)) {
-          places.slice(0, 50).forEach((place: { category?: string[] }) => {
-            if (place.category && Array.isArray(place.category)) {
-              place.category.forEach((cat: string) => categories.add(cat));
+          places.slice(0, 100).forEach((place: any) => {
+            if (place && typeof place === 'object') {
+              allPlaces.push({
+                name: place.name || place.Name || 'Без названия',
+                city: cityName,
+                category: place.category || place.Category || [],
+                tags: place.tags || place.Tags || {},
+                lat: place.lat || place.Lat || place.latitude || place.Latitude,
+                lng: place.lon || place.Lon || place.longitude || place.Longitude || place.lng || place.Lng,
+              });
             }
           });
         }
+      }
+      
+      // Фильтруем места по запросу пользователя
+      const searchTerms = prompt.toLowerCase().split(/\s+/).filter(term => term.length > 2);
+      const relevantPlaces = allPlaces.filter(place => {
+        if (searchTerms.length === 0) return false;
         
-        const categoriesText = Array.from(categories).slice(0, 5).join(', ');
-        return `- ${cityName} (ID: ${city._id?.toString()}): ${placesCount} мест. Категории: ${categoriesText || 'разные'}`;
+        const placeName = (place.name || '').toLowerCase();
+        const placeCategory = (place.category || []).map((c: string) => c.toLowerCase()).join(' ');
+        const placeTags = Object.values(place.tags || {}).map(v => String(v).toLowerCase()).join(' ');
+        const allText = `${placeName} ${placeCategory} ${placeTags}`;
+        
+        return searchTerms.some(term => allText.includes(term));
+      }).slice(0, 20); // Берем топ 20 релевантных мест
+      
+      if (relevantPlaces.length > 0) {
+        const placesInfo = relevantPlaces.map(place => {
+          const categoryText = (place.category || []).slice(0, 3).join(', ') || 'разное';
+          const coordsText = place.lat && place.lng ? ` (${place.lat.toFixed(4)}, ${place.lng.toFixed(4)})` : '';
+          return `- ${place.name} в ${place.city}${coordsText} | Категория: ${categoryText}`;
+        }).join('\n');
+        
+        dbPlacesContext = `\n\nРЕЛЕВАНТНЫЕ МЕСТА ИЗ БАЗЫ ДАННЫХ (найдено ${relevantPlaces.length}):\n${placesInfo}\n\nИспользуй эту информацию при ответе пользователю. Если пользователь спрашивает о конкретном месте, упомяни его из базы данных.`;
+      }
+    }
+  } catch (error) {
+    console.warn('[AI Guide] Failed to search places in MongoDB', error);
+  }
+
+  // Получаем общую информацию о городах из БД
+  let citiesContext = '';
+  try {
+    const { db } = await connectToDatabase();
+    const { ObjectId } = await import('mongodb');
+    
+    const cityIds = Object.keys(CITY_NAMES);
+    const cities = await db.collection('towns').find({
+      _id: { $in: cityIds.map(id => new ObjectId(id)) }
+    }).toArray();
+    
+    if (cities.length > 0) {
+      const citiesInfo = cities.map(city => {
+        const places = city.items || city.places || city.Places || city.data || [];
+        const placesCount = Array.isArray(places) ? places.length : 0;
+        const cityId = city._id?.toString() || '';
+        const cityName = CITY_NAMES[cityId] || city.name || city.Name || city.meta?.name || 'Неизвестный город';
+        
+        return `- ${cityName}: ${placesCount} мест в базе данных`;
       }).join('\n');
       
-      citiesContext = `\n\nДОСТУПНЫЕ ГОРОДА В БАЗЕ ДАННЫХ:\n${citiesInfo}\n\nКогда пользователь спрашивает о местах, ресторанах, магазинах, достопримечательностях в Шымкенте или Алматы, используй информацию из базы данных. Можешь упоминать конкретные места, если они есть в базе.`;
+      citiesContext = `\n\nДОСТУПНЫЕ ГОРОДА В БАЗЕ ДАННЫХ:\n${citiesInfo}`;
     }
   } catch (error) {
     console.warn('[AI Guide] Failed to fetch cities from MongoDB', error);
@@ -130,6 +235,7 @@ export async function POST(request: NextRequest) {
     { role: 'system' as const, content: SYSTEM_PROMPT },
     ...(locationContext ? [{ role: 'system' as const, content: locationContext }] : []),
     ...(citiesContext ? [{ role: 'system' as const, content: citiesContext }] : []),
+    ...(dbPlacesContext ? [{ role: 'system' as const, content: dbPlacesContext }] : []),
     ...safeHistory,
     { role: 'user' as const, content: prompt },
   ];

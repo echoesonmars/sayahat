@@ -65,10 +65,49 @@ const MARKER_COLORS = ['#00A36C', '#F59E0B', '#2563EB', '#EF4444', '#7C3AED'];
 
 function MapRelocator({ position }: { position: LatLngExpression | null }) {
   const map = useMap();
+  const hasUserMovedRef = useRef(false);
+  const initialPositionSetRef = useRef(false);
 
   useEffect(() => {
-    if (position) {
+    // Устанавливаем начальную позицию только один раз
+    if (position && !initialPositionSetRef.current) {
       map.flyTo(position, 13, { duration: 1.2 });
+      initialPositionSetRef.current = true;
+    }
+  }, [map, position]);
+
+  useEffect(() => {
+    // Проверяем, мобильное ли устройство
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    
+    // Отслеживаем перемещение карты пользователем (только на мобильных)
+    if (!isMobile) return;
+
+    const handleDragStart = () => {
+      hasUserMovedRef.current = true;
+    };
+
+    const handleMoveEnd = () => {
+      // Флаг остается true, чтобы карта не возвращалась автоматически
+    };
+
+    map.on('dragstart', handleDragStart);
+    map.on('moveend', handleMoveEnd);
+
+    return () => {
+      map.off('dragstart', handleDragStart);
+      map.off('moveend', handleMoveEnd);
+    };
+  }, [map]);
+
+  // На мобильных устройствах не возвращаем карту автоматически после того, как пользователь её переместил
+  useEffect(() => {
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    if (!isMobile) return; // На десктопе работаем как обычно
+    
+    if (position && hasUserMovedRef.current) {
+      // Не перемещаем карту, если пользователь уже её переместил
+      return;
     }
   }, [map, position]);
 
@@ -301,6 +340,9 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
         scrollWheelZoom
         className="h-full w-full grayscale-[0.05] contrast-[1.05] saturate-[1.05]"
         zoomControl={false}
+        dragging={true}
+        touchZoom={true}
+        doubleClickZoom={true}
       >
         <TileLayer
           attribution='&copy; OpenStreetMap contributors &copy; CARTO'
@@ -411,11 +453,15 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
         <div className="absolute left-3 sm:left-4 right-3 sm:right-4 top-16 sm:top-20 lg:top-24 lg:right-4 lg:left-auto lg:w-[260px] z-[999] rounded-2xl border border-[#006948]/10 bg-white/90 p-3 sm:p-4 text-sm text-[#0F2D1E] shadow-lg backdrop-blur">
           <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] sm:tracking-[0.35em] text-[#00A36C]">подсказки</p>
           <ul className="mt-2 space-y-2 list-disc pl-4 text-[#0F2D1E]">
-            {routePlan?.hints?.map((hint, index) => (
-              <li key={`hint-${index}`} className="text-[11px] sm:text-xs leading-relaxed break-words">
-                {hint}
-              </li>
-            ))}
+            {routePlan?.hints?.map((hint, index) => {
+              // Поддерживаем как строки, так и объекты
+              const hintText = typeof hint === 'string' ? hint : (hint?.instruction || String(hint));
+              return (
+                <li key={`hint-${index}`} className="text-[11px] sm:text-xs leading-relaxed break-words">
+                  {hintText}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ) : null}

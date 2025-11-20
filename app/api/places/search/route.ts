@@ -4,6 +4,13 @@ import { haversineDistance } from '@/lib/geo';
 
 export const runtime = 'nodejs';
 
+// Маппинг ObjectId на названия городов
+const CITY_NAMES: Record<string, string> = {
+  '691c9b692f57d6e91156d18a': 'Шымкент',
+  '691c9b892f57d6e91156d18b': 'Алматы',
+  '691f5027819a19c6c6a57e12': 'Астана',
+};
+
 type PlaceFromTowns = {
   id: string;
   name: string;
@@ -53,11 +60,13 @@ export async function GET(request: NextRequest) {
     
     if (towns.length > 0) {
       const firstTown = towns[0];
-      const places = firstTown.places || firstTown.Places || firstTown.data || [];
+      const places = firstTown.items || firstTown.places || firstTown.Places || firstTown.data || [];
       console.log('[Places Search] First town structure:', {
         _id: firstTown._id?.toString(),
-        name: firstTown.name,
-        hasPlaces: !!places,
+        name: firstTown.name || firstTown.meta?.name,
+        hasItems: !!firstTown.items,
+        hasPlacesField: !!firstTown.places,
+        placesFound: !!places,
         placesType: Array.isArray(places) ? 'array' : typeof places,
         placesLength: Array.isArray(places) ? places.length : 'N/A',
         firstPlaceSample: Array.isArray(places) && places.length > 0 
@@ -79,10 +88,11 @@ export async function GET(request: NextRequest) {
     const allPlaces: (PlaceFromTowns & { cityName: string; cityId: string })[] = [];
 
     for (const town of towns) {
-      // Пробуем разные варианты названия поля
-      const places = town.places || town.Places || town.data || [];
-      const cityName = town.name || town.Name || 'Неизвестный город';
+      // Пробуем разные варианты названия поля, включая items
+      const places = town.items || town.places || town.Places || town.data || [];
       const cityId = town._id?.toString() || '';
+      // Определяем название города по ObjectId или из полей документа
+      const cityName = CITY_NAMES[cityId] || town.name || town.Name || town.meta?.name || 'Неизвестный город';
 
       console.log(`[Places Search] Processing town: ${cityName}, places count: ${Array.isArray(places) ? places.length : 'not array'}`);
 
