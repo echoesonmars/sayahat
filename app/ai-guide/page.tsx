@@ -6,13 +6,13 @@ import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Tras
 import { AnimatePresence, motion, Variants } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import type { LatLngExpression } from 'leaflet';
-import dynamic from 'next/dynamic';
+import nextDynamic from 'next/dynamic';
 import type { Coordinates, RouteInstruction } from '@/lib/geo';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
 // Динамический импорт DeviceLocationMap, чтобы избежать SSR проблем с window
-const DeviceLocationMap = dynamic(() => import('./DeviceLocationMap').then(mod => ({ default: mod.DeviceLocationMap })), {
+const DeviceLocationMap = nextDynamic(() => import('./DeviceLocationMap').then(mod => ({ default: mod.DeviceLocationMap })), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-full min-h-[260px]">Загрузка карты...</div>
 });
