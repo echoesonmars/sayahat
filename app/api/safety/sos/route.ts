@@ -34,8 +34,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Получаем данные пользователя, который отправил SOS
+    const { ObjectId } = await import('mongodb');
     const sosUser = await db.collection('users').findOne(
-      { _id: session.user.id },
+      { _id: new ObjectId(session.user.id) },
       { projection: { name: 1, email: 1 } }
     );
 
