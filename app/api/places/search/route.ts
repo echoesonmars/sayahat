@@ -3,6 +3,7 @@ import { connectToDatabase } from '@/lib/mongodb';
 import { haversineDistance } from '@/lib/geo';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Маппинг ObjectId на названия городов
 const CITY_NAMES: Record<string, string> = {

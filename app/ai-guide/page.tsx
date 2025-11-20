@@ -2051,12 +2051,203 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   );
 }
 
-function TemplatesTab() {
-  const [templates] = useState<Array<{ id: string; title: string; description: string; rating: number; duration: string }>>([
-    { id: '1', title: 'Классический Алматы', description: 'Обзорная экскурсия по главным достопримечательностям', rating: 4.8, duration: '4 часа' },
-    { id: '2', title: 'Гастротур по Казахстану', description: 'Знакомство с национальной кухней', rating: 4.9, duration: '6 часов' },
-    { id: '3', title: 'Исторический центр', description: 'Пешеходная экскурсия по старому городу', rating: 4.7, duration: '3 часа' },
+// Готовые трипы из страницы бронирования с координатами в пределах городов
+const readyTripsForTemplates: Array<{ id: string; title: string; description: string; rating: number; duration: string; city: string; route: RouteInstruction }> = [
+  {
+    id: 'trip-1',
+    title: 'Исторический Шымкент',
+    city: 'Шымкент',
+    description: 'Погрузитесь в историю древнего города: цитадель, этноаул, горы и традиционная кухня',
+    duration: '1 день',
+    rating: 4.8,
+    route: {
+      origin: { lat: 42.3188, lng: 69.5969 },
+      destination: { lat: 42.3200, lng: 69.6000 },
+      via: [
+        { lat: 42.3300, lng: 69.6100 },
+        { lat: 42.3100, lng: 69.5900 },
+      ],
+    },
+  },
+  {
+    id: 'trip-2',
+    title: 'Алматы: Город и Горы',
+    city: 'Алматы',
+    description: 'Классический маршрут: Кок-Тобе, Медеу, горы и уютные кафе в центре',
+    duration: '1 день',
+    rating: 4.9,
+    route: {
+      origin: { lat: 43.238949, lng: 76.889709 },
+      destination: { lat: 43.2380, lng: 76.9450 },
+      via: [
+        { lat: 43.2263, lng: 77.0501 },
+        { lat: 43.2500, lng: 76.9000 },
+      ],
+    },
+  },
+  {
+    id: 'trip-3',
+    title: 'Современная Астана',
+    city: 'Астана',
+    description: 'Столица Казахстана: Байтерек, Хан Шатыр, музеи и рестораны',
+    duration: '1 день',
+    rating: 4.7,
+    route: {
+      origin: { lat: 51.1256, lng: 71.4306 },
+      destination: { lat: 51.1300, lng: 71.4400 },
+      via: [
+        { lat: 51.1500, lng: 71.4000 },
+        { lat: 51.1200, lng: 71.4500 },
+      ],
+    },
+  },
+  {
+    id: 'trip-4',
+    title: 'Туркестан: Древняя Столица',
+    city: 'Туркестан',
+    description: 'Мавзолей Ходжи Ахмеда Ясави, древние руины и традиционные ремесла',
+    duration: '1 день',
+    rating: 4.6,
+    route: {
+      origin: { lat: 43.2975, lng: 68.2517 },
+      destination: { lat: 43.2950, lng: 68.2550 },
+      via: [
+        { lat: 43.3000, lng: 68.2500 },
+        { lat: 43.2900, lng: 68.2600 },
+      ],
+    },
+  },
+  {
+    id: 'trip-5',
+    title: 'Алтайские Вершины',
+    city: 'Усть-Каменогорск',
+    description: 'Горные походы, озера, водопады и база отдыха в горах',
+    duration: '2 дня',
+    rating: 4.9,
+    route: {
+      origin: { lat: 49.9500, lng: 82.6100 },
+      destination: { lat: 49.9600, lng: 82.6200 },
+      via: [
+        { lat: 49.9400, lng: 82.6000 },
+        { lat: 49.9700, lng: 82.6300 },
+      ],
+    },
+  },
+  {
+    id: 'trip-6',
+    title: 'Караганда: Индустриальное Наследие',
+    city: 'Караганда',
+    description: 'Музеи, памятники, парки и современные кафе в центре города',
+    duration: '1 день',
+    rating: 4.5,
+    route: {
+      origin: { lat: 49.8014, lng: 73.1043 },
+      destination: { lat: 49.8020, lng: 73.1050 },
+      via: [
+        { lat: 49.8100, lng: 73.1200 },
+        { lat: 49.8000, lng: 73.1100 },
+      ],
+    },
+  },
+  {
+    id: 'trip-7',
+    title: 'Актобе: Река и Парки',
+    city: 'Актобе',
+    description: 'Прогулки по набережной, парки, музеи и местная кухня',
+    duration: '1 день',
+    rating: 4.4,
+    route: {
+      origin: { lat: 50.2833, lng: 57.1667 },
+      destination: { lat: 50.2850, lng: 57.1650 },
+      via: [
+        { lat: 50.2900, lng: 57.1700 },
+        { lat: 50.2800, lng: 57.1600 },
+      ],
+    },
+  },
+  {
+    id: 'trip-8',
+    title: 'Павлодар: Иртыш и Культура',
+    city: 'Павлодар',
+    description: 'Набережная Иртыша, театры, музеи и уютные кафе',
+    duration: '1 день',
+    rating: 4.5,
+    route: {
+      origin: { lat: 52.2833, lng: 76.9667 },
+      destination: { lat: 52.2850, lng: 76.9650 },
+      via: [
+        { lat: 52.2900, lng: 76.9700 },
+        { lat: 52.2800, lng: 76.9600 },
+      ],
+    },
+  },
+  {
+    id: 'trip-9',
+    title: 'Тараз: Древний Шелковый Путь',
+    city: 'Тараз',
+    description: 'Древние памятники, мавзолеи, базары и традиционная кухня',
+    duration: '1 день',
+    rating: 4.6,
+    route: {
+      origin: { lat: 42.9000, lng: 71.3667 },
+      destination: { lat: 42.9100, lng: 71.3700 },
+      via: [
+        { lat: 42.9200, lng: 71.3800 },
+        { lat: 42.8900, lng: 71.3600 },
+      ],
+    },
+  },
+  {
+    id: 'trip-10',
+    title: 'Костанай: Степи и Озера',
+    city: 'Костанай',
+    description: 'Озера, парки, музеи и современные развлечения',
+    duration: '1 день',
+    rating: 4.4,
+    route: {
+      origin: { lat: 53.2167, lng: 63.6333 },
+      destination: { lat: 53.2150, lng: 63.6300 },
+      via: [
+        { lat: 53.2200, lng: 63.6400 },
+        { lat: 53.2100, lng: 63.6200 },
+      ],
+    },
+  },
+];
+
+function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) => void }) {
+  const [templates, setTemplates] = useState<Array<{ id: string; title: string; description: string; rating: number; duration: string; city?: string; route?: RouteInstruction }>>([
+    ...readyTripsForTemplates,
   ]);
+
+  useEffect(() => {
+    // Загружаем трип из localStorage, если он был передан со страницы бронирования
+    if (typeof window !== 'undefined') {
+      const savedTripRoute = localStorage.getItem('readyTripRoute');
+      if (savedTripRoute) {
+        try {
+          const route = JSON.parse(savedTripRoute) as RouteInstruction;
+          // Добавляем трип в список или обновляем существующий
+          const tripFromBooking = {
+            id: 'booking-trip',
+            title: 'Готовый трип из бронирований',
+            description: 'Маршрут, выбранный на странице бронирований',
+            rating: 4.8,
+            duration: '1 день',
+            city: 'Казахстан',
+            route,
+          };
+          setTemplates(prev => {
+            const filtered = prev.filter(t => t.id !== 'booking-trip');
+            return [tripFromBooking, ...filtered];
+          });
+          localStorage.removeItem('readyTripRoute');
+        } catch (error) {
+          console.error('Failed to parse saved trip route', error);
+        }
+      }
+    }
+  }, []);
 
   return (
     <div className="mt-3 flex-1 space-y-3 overflow-y-auto pr-2 lg:min-h-0">
@@ -2090,14 +2281,33 @@ function TemplatesTab() {
                       <Clock className="h-3 w-3" />
                       {template.duration}
                     </span>
+                    {template.city && (
+                      <span className="flex items-center gap-1">
+                        <MapPinned className="h-3 w-3" />
+                        {template.city}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
-                >
-                  Использовать
-                </button>
+                <div className="flex flex-col gap-2">
+                  {template.route && onRouteBuild && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onRouteBuild(template.route!);
+                      }}
+                      className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
+                    >
+                      На карте
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
+                  >
+                    Использовать
+                  </button>
+                </div>
               </div>
             </motion.div>
           ))}
@@ -2856,7 +3066,12 @@ function AIGuidePageContent() {
                       transition={{ duration: 0.2 }}
                       className="flex h-full flex-col lg:min-h-0"
                     >
-                      <TemplatesTab />
+                      <TemplatesTab 
+                        onRouteBuild={(route) => {
+                          setRoutePlan(route);
+                          setRouteKey(prev => prev + 1);
+                        }}
+                      />
                     </motion.div>
                   )}
                 </AnimatePresence>

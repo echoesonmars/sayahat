@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/authOptions';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 // Генерирует уникальный код (6-значный)
 function generateUniqueCode(): string {
