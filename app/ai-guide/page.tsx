@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Copy, Check, X, MessageSquare, List, Map } from 'lucide-react';
 import { AnimatePresence, motion, Variants } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
@@ -1111,7 +1113,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
 
   // Получаем местоположение и обновляем его
   useEffect(() => {
-    if (navigator.geolocation) {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
       // Сначала быстро получаем из кеша
       navigator.geolocation.getCurrentPosition(
         async (position) => {
@@ -1170,7 +1172,9 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
 
   const copyCode = () => {
     if (safetyCode) {
-      navigator.clipboard.writeText(safetyCode);
+      if (typeof window !== 'undefined' && navigator.clipboard) {
+        navigator.clipboard.writeText(safetyCode);
+      }
       setCodeCopied(true);
       setTimeout(() => setCodeCopied(false), 2000);
     }
@@ -1268,7 +1272,9 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
         alert('SOS сигнал отправлен!');
         // Здесь можно добавить звонок через tel: ссылку
         if (data.phoneNumber) {
-          window.location.href = `tel:${data.phoneNumber}`;
+          if (typeof window !== 'undefined') {
+            window.location.href = `tel:${data.phoneNumber}`;
+          }
         }
       } else {
         alert(data.error || 'Ошибка при отправке SOS');
@@ -1302,7 +1308,9 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
   };
 
   const openLocationOnMap = (lat: number, lng: number) => {
-    window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+    if (typeof window !== 'undefined') {
+      window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+    }
   };
 
   return (
@@ -1515,7 +1523,7 @@ function SearchTab() {
 
   // Получаем местоположение пользователя
   useEffect(() => {
-    if (navigator.geolocation) {
+    if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setUserLocation({
@@ -1841,7 +1849,7 @@ export default function AIGuidePage() {
   }
 
   useEffect(() => {
-    if (!navigator.geolocation) {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
       setGeoError(true);
       return;
     }

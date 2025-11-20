@@ -96,7 +96,9 @@ function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
   useEffect(() => {
     if (waypoints.length < 2) return;
 
-    (window as WindowWithLeaflet).L = L;
+    if (typeof window !== 'undefined') {
+      (window as WindowWithLeaflet).L = L;
+    }
 
     let isCancelled = false;
 
