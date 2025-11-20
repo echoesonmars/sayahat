@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
     console.log('[Places Search] Query:', { query, cityId, lat, lng, limit, category });
 
     // Получаем города из коллекции towns
-    const townsQuery: { _id?: unknown } = {};
+    const { ObjectId } = await import('mongodb');
+    const townsQuery: { _id?: typeof ObjectId.prototype } = {};
     if (cityId) {
-      const { ObjectId } = await import('mongodb');
       if (ObjectId.isValid(cityId)) {
         townsQuery._id = new ObjectId(cityId);
       }
