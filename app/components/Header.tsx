@@ -15,7 +15,6 @@ export default function Navbar() {
   const navItems = [
     { name: "Главная", link: "/" },
     { name: "AI-Гид", link: "/ai-guide" },
-    /* { name: "Карта", link: "/map" }, */
     { name: "Бронирования", link: "/booking" },
     { name: "Безопасность", link: "/safety" },
     { name: "О нас", link: "/about" },
@@ -51,12 +50,12 @@ export default function Navbar() {
           `}
         >
 
-          <a href="/" className="flex items-center space-x-1 z-20 relative">
+          <Link href="/" className="flex items-center space-x-1 z-20 relative">
             <Ribbon className="text-[#006948]"/>
             <span className="font-tapestry tracking-[-0.07em] text-xl text-black dark:text-white  whitespace-nowrap">
               sayahat
             </span>
-          </a>
+          </Link>
 
           <div className="tracking-[-0.07em] absolute inset-0 flex items-center justify-center space-x-1 pointer-events-none">
             <div className="flex space-x-1 pointer-events-auto">
@@ -143,13 +142,13 @@ export default function Navbar() {
           `}
         >
           <div className="flex items-center justify-between">
-    <a
-      href="#"
+    <Link
+      href="/"
       className="relative z-20 mr-4 flex items-center space-x-1 px-2 py-1 text-sm font-normal"
     >
       <Ribbon className="text-[#006948]"/>
       <h1 className="font-tapestry tracking-[-0.07em] text-[#006948] dark:text-white ">sayahat</h1>
-    </a>
+    </Link>
 
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}

@@ -9,7 +9,7 @@ const teamMembers = [
     name: "Алимжан Жорабек",
     role: "Основатель & CEO",
     description: "Full-stack разработчик, UX/UI дизайнер",
-    image: "/images/team1.jpg", // Замените на реальные пути к фотографиям
+    image: "/images/team1.jpg",
   },
   {
     name: "Сырым Молдахул",
@@ -28,7 +28,6 @@ const teamMembers = [
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-white">
-      {/* Team Section */}
       <section className="px-4 mt-[2rem] sm:px-6 lg:px-8 py-16 sm:py-24 bg-gradient-to-b from-white to-[#F8FFFB]">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
@@ -106,7 +105,6 @@ export default function AboutPage() {
         </div>
       </section>
 
-      {/* Values Section */}
       <section className="px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
         <div className="mx-auto max-w-5xl">
           <BlurFade inView>

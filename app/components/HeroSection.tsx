@@ -1,6 +1,7 @@
 import { TextAnimate } from "@/components/ui/text-animate";
 import { InteractiveHoverButton } from "@/components/ui/interactive-hover-button"
 import { BlurFade } from "@/components/ui/blur-fade"
+import Link from "next/link"
 
 export function HeroSec() {
   return (
@@ -37,9 +38,11 @@ export function HeroSec() {
       <div className="mb-25 max-w-2xl mt-6 sm:mt-9 md:mt-6 lg:mt-6 mb-25 mx-auto flex justify-left px-4">
         <BlurFade delay={4} inView>
           <div className="w-full sm:w-auto">
-            <InteractiveHoverButton className="w-full sm:w-auto ">
-              Начать путешествие
-            </InteractiveHoverButton>
+            <Link href="/ai-guide">
+              <InteractiveHoverButton className="w-full sm:w-auto ">
+                Начать путешествие
+              </InteractiveHoverButton>
+            </Link>
           </div>
         </BlurFade>
       </div>

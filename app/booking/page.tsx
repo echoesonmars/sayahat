@@ -58,7 +58,6 @@ const bookingCategories = [
   { id: "buses", name: "Автобусы", icon: Bus, color: "from-red-500 to-red-600" },
 ];
 
-// Выдуманные данные для рекомендаций
 const recommendedItems: Record<string, BookingItem[]> = {
   hotels: [
     {
@@ -191,7 +190,6 @@ const recommendedItems: Record<string, BookingItem[]> = {
   ],
 };
 
-// 10 готовых трипов по разным городам Казахстана
 const readyTrips: ReadyTrip[] = [
   {
     id: "1",
@@ -444,22 +442,18 @@ export default function BookingPage() {
     fetchPlans();
   }, [session]);
 
-  // Проверяем, есть ли в планах бронируемые элементы
   const hasBookableItems = (plan: Plan) => {
     if (!plan.locations || plan.locations.length === 0) return false;
-    // Проверяем, есть ли отели, транспорт и т.д. в описании или локациях
     const bookableKeywords = ["отель", "hotel", "гостиница", "транспорт", "поезд", "самолет", "автобус", "такси"];
     const planText = `${plan.title} ${plan.description || ""} ${plan.locations.map((l) => l.name).join(" ")}`.toLowerCase();
     return bookableKeywords.some((keyword) => planText.includes(keyword));
   };
 
   const handleBook = (item: BookingItem) => {
-    // Здесь можно добавить логику бронирования
     alert(`Бронирование ${item.name} будет доступно в ближайшее время!`);
   };
 
   const handleUseTrip = (trip: ReadyTrip) => {
-    // Сохраняем маршрут в localStorage и переходим на AI-гид с открытым маршрутом
     if (typeof window !== "undefined") {
       localStorage.setItem("readyTripRoute", JSON.stringify(trip.route));
       router.push(`/ai-guide?tab=templates&trip=${trip.id}`);
@@ -468,7 +462,6 @@ export default function BookingPage() {
 
   return (
     <main className="min-h-screen bg-white">
-      {/* Hero Section */}
       <section className="px-4 mt-[6rem] sm:px-6 lg:px-8 py-16 sm:py-24">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
@@ -504,7 +497,6 @@ export default function BookingPage() {
         </div>
       </section>
 
-      {/* Available Bookings from Plans */}
       <section className="px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
@@ -625,7 +617,6 @@ export default function BookingPage() {
         </div>
       </section>
 
-      {/* Sayahat Recommends */}
       <section className="px-4 sm:px-6 lg:px-8 py-12 sm:py-16 bg-gradient-to-b from-white to-[#F8FFFB]">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
@@ -659,7 +650,6 @@ export default function BookingPage() {
             </div>
           </BlurFade>
 
-          {/* Category Tabs */}
           <BlurFade inView delay={0.3}>
             <div className="mb-8 flex flex-wrap gap-3">
               {bookingCategories.map((category) => {
@@ -682,7 +672,6 @@ export default function BookingPage() {
             </div>
           </BlurFade>
 
-          {/* Recommended Items */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recommendedItems[selectedCategory]?.map((item, index) => (
               <BlurFade key={item.id} inView delay={0.4 + index * 0.05}>
@@ -721,7 +710,6 @@ export default function BookingPage() {
         </div>
       </section>
 
-      {/* Ready Trips Section */}
       <section className="px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
@@ -755,7 +743,6 @@ export default function BookingPage() {
             </div>
           </BlurFade>
 
-          {/* Поиск по маршрутам */}
           <div className="mb-6">
             <div className="relative max-w-md">
               <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A]" />

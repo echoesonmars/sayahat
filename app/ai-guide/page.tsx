@@ -12,7 +12,6 @@ import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 
-// Динамический импорт DeviceLocationMap, чтобы избежать SSR проблем с window
 const DeviceLocationMap = nextDynamic(() => import('./DeviceLocationMap').then(mod => ({ default: mod.DeviceLocationMap })), {
   ssr: false,
   loading: () => <div className="flex items-center justify-center h-full min-h-[260px]">Загрузка карты...</div>
@@ -23,7 +22,7 @@ type Message = {
   author: 'user' | 'ai';
   text: string;
   timestamp: string;
-  image?: string; // base64 изображение
+  image?: string;
 };
 
 const presetMessages: Message[] = [];
@@ -160,12 +159,11 @@ function parsePlanAndNote(rawText: string): { text: string; plan: ParsedPlan | n
   let parsedPlan: ParsedPlan | null = null;
   let parsedNote: ParsedNote | null = null;
 
-  // Parse plan - более гибкое регулярное выражение
   const planMatch = rawText.match(/<plan>\s*([\s\S]*?)\s*<\/plan>/i);
   if (planMatch) {
     const [fullMatch, jsonPayload] = planMatch;
     try {
-      // Очищаем JSON от возможных лишних символов
+
       const cleanedJson = jsonPayload.trim().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ');
       const parsed = JSON.parse(cleanedJson);
       console.log('Parsed plan JSON:', parsed);
@@ -189,12 +187,11 @@ function parsePlanAndNote(rawText: string): { text: string; plan: ParsedPlan | n
     console.log('No <plan> tag found in response');
   }
 
-  // Parse note - более гибкое регулярное выражение
   const noteMatch = rawText.match(/<note>\s*([\s\S]*?)\s*<\/note>/i);
   if (noteMatch) {
     const [fullMatch, jsonPayload] = noteMatch;
     try {
-      // Очищаем JSON от возможных лишних символов
+
       const cleanedJson = jsonPayload.trim().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ');
       const parsed = JSON.parse(cleanedJson);
       console.log('Parsed note JSON:', parsed);
@@ -219,7 +216,6 @@ function parsePlanAndNote(rawText: string): { text: string; plan: ParsedPlan | n
   return { text: cleanedText, plan: parsedPlan, note: parsedNote };
 }
 
-// Функция для конвертации файла в base64
 function convertImageToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -236,7 +232,6 @@ function convertImageToBase64(file: File): Promise<string> {
   });
 }
 
-// Tab Content Components
 function PlansTab({
   messages,
   inputValue,
@@ -289,7 +284,7 @@ function PlansTab({
               >
                 {message.image && (
                   <div className="mb-2 rounded-lg overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    {}
                     <img 
                       src={message.image} 
                       alt="Прикрепленное изображение" 
@@ -346,7 +341,7 @@ function PlansTab({
         {selectedImage && (
           <div className="mt-4 relative inline-block">
             <div className="relative rounded-lg overflow-hidden border-2 border-[#006948]/20">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {}
               <img 
                 src={selectedImage} 
                 alt="Предпросмотр" 
@@ -440,7 +435,7 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
     
     async function fetchPlans() {
       try {
-        // Добавляем таймаут для запроса
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 секунд таймаут
         
@@ -688,7 +683,7 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
         <AnimatePresence>
           {savedPlans.map((plan) => (
             (() => {
-              // Проверяем, есть ли места с координатами
+
               type LocationWithCoords = { lat: number; lng: number; name?: string };
               const locationsWithCoords = (plan.locations || []).filter((loc: unknown): loc is LocationWithCoords => 
                 loc !== null && typeof loc === 'object' && 'lat' in loc && 'lng' in loc &&
@@ -727,11 +722,10 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                         <button
                           type="button"
                           onClick={() => {
-                            // Строим маршрут из всех мест плана
+
                             const firstLocation = locationsWithCoords[0] as { lat: number; lng: number; name?: string };
                             const lastLocation = locationsWithCoords[locationsWithCoords.length - 1] as { lat: number; lng: number; name?: string };
-                            
-                            // Если есть несколько мест, используем первое как начало, последнее как конец, остальные как via
+
                             const viaPoints = locationsWithCoords.slice(1, -1).map((loc) => ({
                               lat: loc.lat,
                               lng: loc.lng,
@@ -797,7 +791,7 @@ function NotesTab({ refreshTrigger }: { refreshTrigger?: number }) {
     
     async function fetchNotes() {
       try {
-        // Добавляем таймаут для запроса
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 секунд таймаут
         
@@ -1030,7 +1024,7 @@ function NotesTab({ refreshTrigger }: { refreshTrigger?: number }) {
         </AnimatePresence>
       )}
 
-      {/* Модальное окно для просмотра заметки */}
+      {}
       {selectedNote && (
         <div 
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1135,7 +1129,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
     status: string;
   }>>([]);
 
-  // Получаем уникальный код пользователя
   useEffect(() => {
     async function fetchSafetyCode() {
       try {
@@ -1153,13 +1146,12 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
     fetchSafetyCode();
   }, []);
 
-  // Получаем список контактов
   useEffect(() => {
     let isMounted = true;
     
     async function fetchContacts() {
       try {
-        // Добавляем таймаут для запроса
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
         
@@ -1176,7 +1168,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
           const fetchedContacts = data.contacts || [];
           setContacts(fetchedContacts);
           
-          // Передаем контакты с местоположениями в родительский компонент
           if (onContactsChange) {
             const contactsWithLocation = fetchedContacts
               .filter((c: typeof fetchedContacts[0]) => !c.isOwner && c.lastLocation)
@@ -1205,7 +1196,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
     
     fetchContacts();
     
-    // Обновляем контакты каждые 10 секунд для получения актуального местоположения
     const interval = setInterval(fetchContacts, 10000);
     
     return () => {
@@ -1214,7 +1204,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
     };
   }, [onContactsChange]);
 
-  // Получаем SOS сигналы
   useEffect(() => {
     async function fetchSOSAlerts() {
       try {
@@ -1229,15 +1218,13 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
     }
     fetchSOSAlerts();
     
-    // Обновляем SOS сигналы каждые 5 секунд
     const interval = setInterval(fetchSOSAlerts, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  // Получаем местоположение и обновляем его
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
-      // Сначала быстро получаем из кеша
+
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const loc = {
@@ -1246,7 +1233,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
           };
           setUserLocation(loc);
 
-          // Отправляем местоположение на сервер
           try {
             await fetch('/api/safety/location', {
               method: 'POST',
@@ -1258,12 +1244,11 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
           }
         },
         () => {
-          // Игнорируем ошибку, продолжаем с watchPosition
+
         },
         { enableHighAccuracy: false, timeout: 2000, maximumAge: 60_000 }
       );
 
-      // Затем включаем отслеживание для обновлений
       const watchId = navigator.geolocation.watchPosition(
         async (position) => {
           const loc = {
@@ -1272,7 +1257,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
           };
           setUserLocation(loc);
 
-          // Отправляем местоположение на сервер
           try {
             await fetch('/api/safety/location', {
               method: 'POST',
@@ -1321,7 +1305,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
 
       if (response.ok) {
         setInputCode('');
-        // Немедленно обновляем список контактов
+
         try {
           const contactsResponse = await fetch('/api/safety/contacts');
           if (contactsResponse.ok) {
@@ -1329,7 +1313,6 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
             const fetchedContacts = contactsData.contacts || [];
             setContacts(fetchedContacts);
             
-            // Передаем контакты с местоположениями в родительский компонент
             if (onContactsChange) {
               const contactsWithLocation = fetchedContacts
                 .filter((c: typeof fetchedContacts[0]) => !c.isOwner && c.lastLocation)
@@ -1393,7 +1376,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
 
       if (response.ok) {
         alert('SOS сигнал отправлен!');
-        // Здесь можно добавить звонок через tel: ссылку
+
         if (data.phoneNumber) {
           if (typeof window !== 'undefined') {
             window.location.href = `tel:${data.phoneNumber}`;
@@ -1438,7 +1421,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
 
   return (
     <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-2 sm:pr-2 lg:min-h-0">
-      {/* SOS сигналы */}
+      {}
       {sosAlerts.length > 0 && (
         <div className="rounded-xl border-2 border-red-500 bg-red-50 p-3 sm:p-4">
           <div className="flex items-center gap-2 mb-3">
@@ -1484,7 +1467,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
         </div>
       )}
 
-      {/* Секция уникального кода */}
+      {}
       <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <div className="flex items-center gap-2 mb-3">
           <Shield className="h-5 w-5 text-[#006948] flex-shrink-0" />
@@ -1515,7 +1498,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
         </p>
       </div>
 
-      {/* Секция добавления контакта */}
+      {}
       <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <h3 className="text-sm font-semibold text-[#0F2D1E] mb-3">Добавить контакт по коду</h3>
         <div className="flex flex-col sm:flex-row gap-2">
@@ -1538,7 +1521,7 @@ function SafetyTab({ onContactsChange }: { onContactsChange?: (contacts: Array<{
         </div>
       </div>
 
-      {/* Список контактов */}
+      {}
       <div className="rounded-xl border border-[#006948]/20 bg-white p-3 sm:p-4">
         <h3 className="text-sm font-semibold text-[#0F2D1E] mb-3">Мои контакты безопасности</h3>
         {isLoadingContacts ? (
@@ -1671,9 +1654,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   const [searchError, setSearchError] = useState<string | null>(null);
   const [avgPrice, setAvgPrice] = useState<number | undefined>(undefined);
 
-  // const router = useRouter(); // Не используется в SearchTab
 
-  // Получаем местоположение пользователя
   useEffect(() => {
     if (typeof window !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -1684,13 +1665,12 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
           });
         },
         () => {
-          // Игнорируем ошибки геолокации
+
         },
       );
     }
   }, []);
 
-  // Загрузка мест по категории или текстовому запросу
   useEffect(() => {
     if (!selectedCategory && !searchQuery.trim()) {
       setSearchResults([]);
@@ -1700,7 +1680,6 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
       return;
     }
 
-    // Сбрасываем результаты при смене города
     if (selectedCategory) {
       setSearchResults([]);
     }
@@ -1713,16 +1692,15 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         let response: Response;
         
         if (selectedCategory) {
-          // Поиск по категории
+
         const params = new URLSearchParams({
             category: selectedCategory,
             limit: '15',
           });
 
-          // Добавляем фильтр по городу, если выбран
           if (selectedCity !== 'all') {
-            // Для API нужно передать cityId, но мы можем фильтровать на клиенте или передать название города
-            // Пока передаем как параметр, который API может использовать для фильтрации
+
+
             params.append('city', selectedCity);
           }
 
@@ -1740,7 +1718,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
             },
           });
         } else {
-          // Поиск через GPT по текстовому запросу
+
           console.log('[SearchTab] Fetching GPT search:', searchQuery);
 
           response = await fetch('/api/places/gpt-search', {
@@ -1802,7 +1780,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
       }
     };
 
-    const timeoutId = setTimeout(fetchPlaces, selectedCategory ? 0 : 500); // Debounce для текстового поиска
+    const timeoutId = setTimeout(fetchPlaces, selectedCategory ? 0 : 500);
     return () => clearTimeout(timeoutId);
   }, [selectedCategory, selectedCity, searchQuery, userLocation]);
 
@@ -1814,7 +1792,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
 
   const calculateMinutes = (distanceKm?: number) => {
     if (!distanceKm) return null;
-    // Примерная скорость 50 км/ч для расчета времени
+
     const minutes = Math.round((distanceKm / 50) * 60);
     return minutes;
   };
@@ -1822,7 +1800,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   const [routeNotification, setRouteNotification] = useState<string | null>(null);
 
   const handleViewOnMap = (place: typeof searchResults[0]) => {
-    // Переключаемся на вкладку с картой и центрируем на месте
+
     if (onRouteBuild && userLocation) {
       const route: RouteInstruction = {
         destination: {
@@ -1839,7 +1817,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   };
 
   const handleBuildRoute = (place: typeof searchResults[0]) => {
-    // Строим маршрут - старый маршрут автоматически заменяется новым
+
     if (onRouteBuild && userLocation) {
       const route: RouteInstruction = {
         destination: {
@@ -1849,7 +1827,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         origin: userLocation,
         note: `Маршрут к: ${place.name}`,
       };
-      // Заменяем старый маршрут новым
+
       onRouteBuild(route);
       setRouteNotification(`Маршрут к "${place.name}" построен. Переключитесь на вкладку "AI-гид" чтобы увидеть карту.`);
       setTimeout(() => setRouteNotification(null), 5000);
@@ -1860,7 +1838,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
 
   return (
     <div className="mt-3 flex-1 flex flex-col lg:min-h-0 h-full min-h-0 overflow-hidden">
-      {/* Кнопка выбора категории */}
+      {}
       <div className="mb-4 flex-shrink-0">
         <button
           type="button"
@@ -1886,7 +1864,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
           </svg>
         </button>
 
-        {/* Поле поиска */}
+        {}
         <div className="mt-3">
           <p className="text-xs text-[#7A7A7A] mb-2 text-center">или</p>
           <p className="text-xs text-[#7A7A7A] mb-2 text-center">поищите написав что вы хотите и где</p>
@@ -1897,7 +1875,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
             value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setSelectedCategory(null); // Сбрасываем категорию при вводе текста
+                setSelectedCategory(null);
               }}
               placeholder="Например: ресторан в Алматы, музей в Шымкенте..."
               className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20"
@@ -1911,7 +1889,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
       </div>
       </div>
 
-      {/* Модальное окно выбора категорий */}
+      {}
       <AnimatePresence>
         {showCategoryModal && (
           <motion.div
@@ -1943,7 +1921,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
               </div>
             </div>
             <div className="p-6">
-              {/* Выбор города */}
+              {}
               <div className="mb-6">
                 <p className="text-xs uppercase tracking-[0.3em] text-[#00A36C] mb-3">Выберите город</p>
                 <div className="flex gap-2">
@@ -1965,7 +1943,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
                 </div>
               </div>
 
-              {/* Выбор категории */}
+              {}
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-[#00A36C] mb-3">Выберите категорию</p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1975,7 +1953,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
                       type="button"
                       onClick={() => {
                         setSelectedCategory(cat.id);
-                        setSearchQuery(''); // Сбрасываем текстовый поиск
+                        setSearchQuery('');
                         setShowCategoryModal(false);
                       }}
                       className={`rounded-xl border p-4 text-center transition ${
@@ -1996,7 +1974,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         )}
       </AnimatePresence>
 
-      {/* Результаты */}
+      {}
       <div className="flex-1 space-y-3 overflow-y-auto overflow-x-hidden px-2 sm:pr-2 min-h-0 pb-4" style={{ WebkitOverflowScrolling: 'touch' }}>
         {routeNotification && (
           <motion.div
@@ -2110,7 +2088,6 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   );
 }
 
-// Готовые трипы из страницы бронирования с координатами в пределах городов
 const readyTripsForTemplates: Array<{ id: string; title: string; description: string; rating: number; duration: string; city: string; route: RouteInstruction }> = [
   {
     id: 'trip-1',
@@ -2281,13 +2258,13 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   useEffect(() => {
-    // Загружаем трип из localStorage, если он был передан со страницы бронирования
+
     if (typeof window !== 'undefined') {
       const savedTripRoute = localStorage.getItem('readyTripRoute');
       if (savedTripRoute) {
         try {
           const route = JSON.parse(savedTripRoute) as RouteInstruction;
-          // Добавляем трип в список или обновляем существующий
+
           const tripFromBooking = {
             id: 'booking-trip',
             title: 'Готовый трип из бронирований',
@@ -2301,7 +2278,7 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
             const filtered = prev.filter(t => t.id !== 'booking-trip');
             return [tripFromBooking, ...filtered];
           });
-          // Автоматически строим маршрут на карте
+
           if (onRouteBuild && route) {
             onRouteBuild(route);
           }
@@ -2325,7 +2302,7 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
 
   return (
     <div className="mt-3 flex-1 flex flex-col min-h-0 relative">
-      {/* Поиск */}
+      {}
       <div className="mb-4 flex-shrink-0 relative z-20 bg-white">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A] pointer-events-none z-10" />
@@ -2339,7 +2316,7 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
         </div>
       </div>
 
-      {/* Список маршрутов */}
+      {}
       <div className="flex-1 space-y-3 overflow-y-auto pr-2 min-h-0 relative z-0">
         {filteredTemplates.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center text-center py-8">
@@ -2416,7 +2393,7 @@ function AIGuidePageContent() {
   const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>(presetMessages);
   const [inputValue, setInputValue] = useState('');
-  const [selectedImage, setSelectedImage] = useState<string | null>(null); // base64 изображение
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState(false);
@@ -2425,7 +2402,7 @@ function AIGuidePageContent() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [routePlan, setRoutePlan] = useState<RouteInstruction | null>(null);
-  const [routeKey, setRouteKey] = useState(0); // Ключ для принудительного обновления маршрута
+  const [routeKey, setRouteKey] = useState(0);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [safetyContacts, setSafetyContacts] = useState<Array<{
     id: string;
@@ -2433,7 +2410,6 @@ function AIGuidePageContent() {
     location: { lat: number; lng: number; timestamp: string } | null;
   }>>([]);
 
-  // Загружаем контакты безопасности независимо от активной вкладки
   useEffect(() => {
     let isMounted = true;
     
@@ -2454,7 +2430,6 @@ function AIGuidePageContent() {
           const data = await response.json();
           const fetchedContacts = data.contacts || [];
           
-          // Фильтруем контакты с местоположениями (те, чье местоположение видно текущему пользователю)
           const contactsWithLocation = fetchedContacts
             .filter((c: typeof fetchedContacts[0]) => !c.isOwner && c.lastLocation)
             .map((c: typeof fetchedContacts[0]) => ({
@@ -2478,7 +2453,6 @@ function AIGuidePageContent() {
     
     fetchContacts();
     
-    // Обновляем контакты каждые 10 секунд для получения актуального местоположения
     const interval = setInterval(fetchContacts, 10000);
     
     return () => {
@@ -2487,7 +2461,6 @@ function AIGuidePageContent() {
     };
   }, []);
 
-  // Перенаправляем на страницу входа, если пользователь не авторизован
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.push('/auth/signin');
@@ -2530,7 +2503,6 @@ function AIGuidePageContent() {
 
     setIsLocating(true);
     
-    // Сначала пытаемся быстро получить местоположение из кеша
     navigator.geolocation.getCurrentPosition(
       (coords) => {
         setPosition([coords.coords.latitude, coords.coords.longitude]);
@@ -2538,12 +2510,11 @@ function AIGuidePageContent() {
         setIsLocating(false);
       },
       () => {
-        // Если кеш не помог, продолжаем с watchPosition
+
       },
       { enableHighAccuracy: false, timeout: 3000, maximumAge: 60_000 }
     );
 
-    // Затем включаем отслеживание с более точными настройками
     const watcherId = navigator.geolocation.watchPosition(
       (coords) => {
         setPosition([coords.coords.latitude, coords.coords.longitude]);
@@ -2560,12 +2531,11 @@ function AIGuidePageContent() {
     return () => navigator.geolocation.clearWatch(watcherId);
   }, []);
 
-  // Обработка параметра tab из URL
   useEffect(() => {
     const tabParam = searchParams.get('tab');
     if (tabParam && chatTabs.some(tab => tab.id === tabParam)) {
       setActiveTab(tabParam);
-      // Очищаем параметр tab из URL
+
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete('tab');
       const newUrl = newSearchParams.toString() 
@@ -2575,7 +2545,6 @@ function AIGuidePageContent() {
     }
   }, [searchParams, router]);
 
-  // Обработка URL параметров для построения маршрута
   useEffect(() => {
     const routeParam = searchParams.get('route');
     const destinationLat = searchParams.get('destinationLat');
@@ -2583,10 +2552,10 @@ function AIGuidePageContent() {
     const destinationName = searchParams.get('destinationName');
     const latParam = searchParams.get('lat');
     const lngParam = searchParams.get('lng');
-    // const nameParam = searchParams.get('name'); // Пока не используется
+
 
     if (routeParam === 'true' && destinationLat && destinationLng) {
-      // Строим маршрут
+
       if (position) {
         const newRoute: RouteInstruction = {
           destination: {
@@ -2601,35 +2570,33 @@ function AIGuidePageContent() {
         };
         setRoutePlan(newRoute);
         setRouteKey(prev => prev + 1);
-        // Переключаемся на вкладку с картой
+
         setActiveTab('plans');
-        // Очищаем параметры URL
+
         router.replace('/ai-guide');
       }
     } else if (latParam && lngParam) {
-      // Показываем место на карте
+
       const mapPosition: LatLngExpression = [Number(latParam), Number(lngParam)];
       setPosition(mapPosition);
       setActiveTab('plans');
-      // Очищаем параметры URL
+
       router.replace('/ai-guide');
     }
   }, [searchParams, position, router]);
 
   const activeHelper = chatTabs.find((tab) => tab.id === activeTab)?.helper;
 
-
-  // Функция для определения намерения пользователя и извлечения текста
   function detectUserIntent(text: string): { wantsPlan: boolean; wantsNote: boolean; content: string } {
     const lowerText = text.toLowerCase();
-    // Расширенный список ключевых слов для планов
+
     const planKeywords = [
       'сохрани план', 'создай план', 'добавь план', 'запомни план', 
       'сохрани в планы', 'создать план', 'добавить план', 'сохрани как план',
       'создай маршрут', 'сохрани маршрут', 'добавь маршрут', 'план поездки',
       'план путешествия', 'маршрут поездки'
     ];
-    // Расширенный список ключевых слов для заметок
+
     const noteKeywords = [
       'сохрани заметку', 'добавь в заметки', 'запомни это', 'сохрани чек', 
       'сохрани ваучер', 'добавить заметку', 'создать заметку', 'сохрани как заметку', 
@@ -2640,7 +2607,6 @@ function AIGuidePageContent() {
     const wantsPlan = planKeywords.some(keyword => lowerText.includes(keyword));
     const wantsNote = noteKeywords.some(keyword => lowerText.includes(keyword));
     
-    // Извлекаем текст после ключевого слова
     let content = text;
     if (wantsPlan) {
       const keyword = planKeywords.find(k => lowerText.includes(k));
@@ -2656,7 +2622,6 @@ function AIGuidePageContent() {
       }
     }
     
-    // Если контент пустой или слишком короткий, используем весь текст
     if (!content || content.length < 3) {
       content = text;
     }
@@ -2683,16 +2648,14 @@ function AIGuidePageContent() {
 
     setMessages(nextMessages);
     setInputValue('');
-    setSelectedImage(null); // Очищаем изображение после отправки
+    setSelectedImage(null);
     setShowPrompts(false);
     setIsGenerating(true);
     setChatError(null);
 
-    // Определяем намерение пользователя
     const { wantsPlan, wantsNote, content } = detectUserIntent(trimmed);
     
-    // Если пользователь хочет сохранить план или заметку, сохраняем напрямую
-    // Проверяем авторизацию
+
     if ((wantsPlan || wantsNote) && !session?.user) {
       const errorMessage: Message = {
         id: generateId(),
@@ -2706,7 +2669,7 @@ function AIGuidePageContent() {
     }
 
     if (wantsPlan) {
-      // Создаем план из текста пользователя
+
       const planTitle = content.length > 50 ? content.substring(0, 50) + '...' : content;
       const planData = {
         title: planTitle,
@@ -2755,7 +2718,7 @@ function AIGuidePageContent() {
         return;
       }
     } else if (wantsNote) {
-      // Создаем заметку из текста пользователя
+
       const noteTitle = content.length > 50 ? content.substring(0, 50) + '...' : content;
       const noteType = trimmed.toLowerCase().includes('чек') ? 'receipt' : 
                       trimmed.toLowerCase().includes('ваучер') ? 'voucher' : 'note';
@@ -2807,7 +2770,6 @@ function AIGuidePageContent() {
       }
     }
     
-    // Если не план и не заметка, продолжаем обычный диалог с AI
     const enhancedPrompt = trimmed || (selectedImage ? 'Проанализируй это изображение и найди похожие места в Казахстане. Опиши, что ты видишь на изображении и предложи места из базы данных, которые могут быть похожи или связаны с этим изображением.' : '');
 
     const conversationHistory = nextMessages.slice(-6).map((message) => ({
@@ -2826,7 +2788,7 @@ function AIGuidePageContent() {
           prompt: enhancedPrompt,
           history: conversationHistory,
           coords: coordsPayload,
-          image: selectedImage || undefined, // Отправляем изображение, если есть
+          image: selectedImage || undefined,
         }),
       });
 
@@ -2839,16 +2801,12 @@ function AIGuidePageContent() {
         payload.reply?.trim() ??
         'Не удалось подготовить маршрут. Попробуйте уточнить детали или задайте другой вопрос.';
       
-      // Debug: log raw answer to see what AI returns
       console.log('Raw AI answer:', rawAnswer);
       
-      // Parse plan and note FIRST (before route, as route might be inside plan)
       const { text: textAfterPlanNote, plan: parsedPlan, note: parsedNote } = parsePlanAndNote(rawAnswer);
       
-      // Parse route instruction from remaining text
       const { text: cleanedRaw, plan: routePlan } = parseRouteInstruction(textAfterPlanNote);
       
-      // Debug: log parsed data
       if (parsedPlan) {
         console.log('Parsed plan:', parsedPlan);
       }
@@ -2865,18 +2823,15 @@ function AIGuidePageContent() {
 
       setMessages((prev) => [...prev, aiMessage]);
       
-      // Set route plan if exists
       if (routePlan) {
         setRoutePlan(routePlan);
         setRouteKey(prev => prev + 1);
       }
 
-      // Save plan if parsed from AI response
       if (parsedPlan) {
         try {
           console.log('Saving plan from AI response...', parsedPlan);
-          
-          // Если в плане есть места с координатами, строим маршрут автоматически
+
           if (parsedPlan.locations && Array.isArray(parsedPlan.locations) && parsedPlan.locations.length > 0) {
             type LocationWithCoords = { lat: number; lng: number; name?: string };
             const locationsWithCoords = parsedPlan.locations.filter((loc: unknown): loc is LocationWithCoords => 
@@ -2893,8 +2848,7 @@ function AIGuidePageContent() {
                   typeof point.lat === 'number' && typeof point.lng === 'number'
                 );
 
-              // Строим маршрут из мест плана
-              // Используем текущее местоположение пользователя как начало, если доступно
+
               let origin: { lat: number; lng: number };
               if (position && Array.isArray(position) && position.length === 2) {
                 origin = { lat: position[0], lng: position[1] };
@@ -2902,7 +2856,7 @@ function AIGuidePageContent() {
                 const pos = position as { lat: number; lng: number };
                 origin = { lat: pos.lat, lng: pos.lng };
               } else {
-                // Если нет текущего местоположения, используем первое место как начало
+
                 origin = { lat: firstLocation.lat, lng: firstLocation.lng };
               }
               
@@ -2918,11 +2872,10 @@ function AIGuidePageContent() {
                   sign: 0,
                 })),
               };
-              
-              // Устанавливаем маршрут на карте
+
               setRoutePlan(planRoute);
               setRouteKey(prev => prev + 1);
-              // Переключаемся на вкладку с картой для просмотра маршрута
+
               setActiveTab('plans');
               
               console.log('Route built from plan locations:', planRoute);
@@ -2971,7 +2924,6 @@ function AIGuidePageContent() {
         }
       }
 
-      // Save note if parsed from AI response
       if (parsedNote) {
         try {
           console.log('Saving note from AI response...', parsedNote);
@@ -2985,7 +2937,7 @@ function AIGuidePageContent() {
             const noteData = await noteResponse.json();
             console.log('Note saved successfully:', noteData);
             setRefreshTrigger((prev) => prev + 1);
-            // Добавляем сообщение о сохранении
+
             const saveMessage: Message = {
               id: generateId(),
               author: 'ai',
@@ -3021,7 +2973,7 @@ function AIGuidePageContent() {
       <div className="flex w-full flex-col justify-center px-3 sm:px-5 lg:px-10 lg:h-[calc(100vh-170px)]">
         <section className="grid w-full gap-4 rounded-[32px] border border-[#006948]/10 bg-white/90 p-4 shadow-[0_28px_90px_rgba(0,105,72,0.08)] backdrop-blur lg:h-full lg:grid-cols-[3fr_2fr] lg:overflow-hidden">
           <div className="flex flex-col lg:h-full lg:min-h-0">
-            {/* Dock версия для мобильных (только иконки) */}
+            {}
             <div className="flex items-center justify-center gap-2 pb-2 lg:hidden overflow-visible relative z-10">
               {chatTabs.map((tab) => {
                 const Icon = tab.icon;
@@ -3057,7 +3009,7 @@ function AIGuidePageContent() {
               })}
             </div>
 
-            {/* Старая версия для десктопа (с текстом) */}
+            {}
             <div className="hidden lg:flex flex-wrap gap-2 pb-2">
               {chatTabs.map((tab) => (
                 <button
@@ -3118,7 +3070,7 @@ function AIGuidePageContent() {
                         onRouteBuild={(route) => {
                           setRoutePlan(route);
                           setRouteKey(prev => prev + 1);
-                          // Переключаемся на вкладку с картой для просмотра маршрута
+
                           setActiveTab('plans');
                         }}
                       />
@@ -3161,7 +3113,7 @@ function AIGuidePageContent() {
                         onRouteBuild={(route) => {
                           setRoutePlan(route);
                           setRouteKey(prev => prev + 1);
-                          // Остаемся на табе поиск мест
+
                         }}
                       />
                     </motion.div>
