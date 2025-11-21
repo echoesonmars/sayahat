@@ -1,49 +1,70 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { BlurFade } from "@/components/ui/blur-fade";
-import { TextAnimate } from "@/components/ui/text-animate";
-import { Stethoscope, Send, Phone, AlertCircle, Loader2, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { SendHorizonal, Phone, ArrowLeft, Image, XCircle } from "lucide-react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, Variants } from "framer-motion";
 
 interface Message {
   id: string;
   author: "user" | "ai";
   text: string;
   timestamp: string;
+  image?: string; // base64 изображение
 }
 
 const medicalPrompts = [
-  {
-    title: "Первая помощь",
-    description: "Инструкции по оказанию первой помощи",
-    prompt: "Расскажи подробно, как оказать первую помощь при травме или несчастном случае. Что нужно сделать в первую очередь?",
-  },
-  {
-    title: "Симптомы",
-    description: "Опишите симптомы для диагностики",
-    prompt: "У меня есть симптомы. Помоги разобраться, что это может быть и что делать.",
-  },
-  {
-    title: "Ближайшая больница",
-    description: "Найти ближайшее медицинское учреждение",
-    prompt: "Где находится ближайшая больница или медицинский пункт? Мне нужна срочная медицинская помощь.",
-  },
-  {
-    title: "Медикаменты",
-    description: "Информация о лекарствах",
-    prompt: "Расскажи о лекарствах, которые могут помочь в экстренной ситуации. Что должно быть в аптечке путешественника?",
-  },
+  "первая помощь при травме",
+  "ближайшая больница",
+  "симптомы и диагностика",
+  "аптечка путешественника",
 ];
+
+const messageVariants: Variants = {
+  initial: { opacity: 0, y: 16, scale: 0.98 },
+  animate: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.28, ease: 'easeOut' } },
+  exit: { opacity: 0, y: -12, scale: 0.96, transition: { duration: 0.2, ease: 'easeIn' } },
+};
+
+const typingDotVariants: Variants = {
+  animate: (index: number) => ({
+    opacity: [0.3, 1, 0.3],
+    y: [0, -2, 0],
+    transition: {
+      duration: 0.9,
+      delay: index * 0.12,
+      repeat: Infinity,
+      repeatType: 'loop',
+      ease: 'easeInOut',
+    },
+  }),
+};
+
+// Функция для конвертации файла в base64
+function convertImageToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        resolve(result);
+      } else {
+        reject(new Error('Failed to convert image to base64'));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function AIMedicPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showPrompts, setShowPrompts] = useState(true);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Получаем местоположение пользователя
   useEffect(() => {
@@ -71,85 +92,42 @@ export default function AIMedicPage() {
     return Math.random().toString(36).substring(2, 9);
   };
 
-  // Функция для форматирования текста ИИ
-  const formatAIText = (text: string): React.ReactNode => {
-    if (!text) return "";
-    
-    let formatted = text;
-    
-    // Убираем markdown код блоки, но оставляем содержимое
-    formatted = formatted.replace(/```[\s\S]*?```/g, (block) => {
-      return block.replace(/```/g, "").trim();
-    });
-    
-    // Убираем одинарные backticks
-    formatted = formatted.replace(/`([^`]+)`/g, "$1");
-    
-    // Убираем жирный текст markdown, но оставляем содержимое
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, "$1");
-    
-    // Убираем курсив markdown
-    formatted = formatted.replace(/\*(.*?)\*/g, "$1");
-    
-    // Убираем заголовки markdown
-    formatted = formatted.replace(/^#{1,6}\s+/gm, "");
-    
-    // Преобразуем списки markdown в обычные списки
-    formatted = formatted.replace(/^\s*[-+]\s+/gm, "• ");
-    formatted = formatted.replace(/^\s*\d+\.\s+/gm, (match) => `${match.trim()} `);
-    
-    // Убираем лишние переносы строк
-    formatted = formatted.replace(/\r/g, "");
-    formatted = formatted.replace(/\n{3,}/g, "\n\n");
-    
-    // Разбиваем на параграфы и обрабатываем списки
-    const lines = formatted.split("\n");
-    const processedLines: React.ReactNode[] = [];
-    
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      
-      if (!trimmedLine) {
-        if (index > 0 && index < lines.length - 1) {
-          processedLines.push(<br key={`br-${index}`} />);
-        }
-        return;
-      }
-      
-      // Проверяем, является ли строка элементом списка
-      if (trimmedLine.match(/^[•\d+\.]/)) {
-        processedLines.push(
-          <div key={`line-${index}`} className="flex items-start gap-2 my-1">
-            <span className="text-[#006948] flex-shrink-0">•</span>
-            <span className="flex-1">{trimmedLine.replace(/^[•\d+\.]\s*/, "")}</span>
-          </div>
-        );
-      } else {
-        processedLines.push(
-          <p key={`line-${index}`} className="mb-2 last:mb-0">
-            {trimmedLine}
-          </p>
-        );
-      }
-    });
-    
-    return processedLines.length > 0 ? <>{processedLines}</> : formatted;
-  };
+  function sanitizeAIResponse(text: string) {
+    if (!text) return '';
+    let cleaned = text;
+    cleaned = cleaned.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
+    cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+    cleaned = cleaned.replace(/\*\*(.*?)\*\*/g, '$1');
+    cleaned = cleaned.replace(/\*(.*?)\*/g, '$1');
+    cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+    cleaned = cleaned.replace(/^\s*[-+]\s+/gm, '• ');
+    cleaned = cleaned.replace(/^\s*\d+\.\s+/gm, (match) => `${match.trim()} `);
+    cleaned = cleaned.replace(/\r/g, '');
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    return cleaned.trim();
+  }
+
+  function handlePromptClick(prompt: string) {
+    handleSend(undefined, prompt);
+  }
 
   const handleSend = async (e?: React.FormEvent<HTMLFormElement>, customPrompt?: string) => {
     e?.preventDefault();
     const prompt = customPrompt || inputValue.trim();
-    if (!prompt || isGenerating) return;
+    if ((!prompt && !selectedImage) || isGenerating) return;
 
     const userMessage: Message = {
       id: generateId(),
       author: "user",
-      text: prompt,
+      text: prompt || (selectedImage ? 'Проанализируй это изображение' : ''),
       timestamp: new Date().toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" }),
+      image: selectedImage || undefined,
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInputValue("");
+    setSelectedImage(null); // Очищаем изображение после отправки
+    setShowPrompts(false);
     setIsGenerating(true);
 
     try {
@@ -165,10 +143,34 @@ export default function AIMedicPage() {
 4. Давать информацию о ближайших медицинских учреждениях (если доступны координаты)
 5. Объяснять симптомы и возможные причины
 6. Рекомендовать состав аптечки путешественника
+7. Анализировать изображения (укусы, раны, сыпь, ожоги, животные, насекомые, змеи и т.д.) и давать рекомендации по первой помощи
+8. При анализе изображений животных/насекомых/змей - описывать визуальные признаки и предлагать возможные варианты идентификации, но честно указывать, что для точной идентификации нужен интернет-поиск или специалист
 
 ${userLocation ? `Пользователь находится в Казахстане, координаты: ${userLocation.lat}, ${userLocation.lng}` : "Пользователь находится в Казахстане"}
 
-Отвечай кратко, четко, по делу. В критических ситуациях сразу предлагай вызвать 112.`;
+Отвечай подробно и детально при анализе изображений. В критических ситуациях сразу предлагай вызвать 112.`;
+
+      const enhancedPrompt = selectedImage 
+        ? `${medicalSystemPrompt}\n\nПользователь прикрепил изображение. Проанализируй его ДЕТАЛЬНО и определи:
+1. Что это может быть (укус, рана, ожог, сыпь, травма, животное, насекомое, змея и т.д.)
+2. Если это животное, насекомое или змея:
+   - Опиши внешние признаки (размер, цвет, форма, узоры, количество ног, наличие крыльев и т.д.)
+   - На основе визуальных признаков предложи ВОЗМОЖНЫЕ варианты (например: "похоже на степную гадюку" или "может быть паук-крестовик")
+   - Укажи, что для ТОЧНОЙ идентификации нужно использовать интернет-поиск по описанию или обратиться к специалисту
+   - Дай рекомендации по первой помощи в зависимости от типа животного
+3. Если это укус или рана:
+   - Определи тип укуса (змеиный, паучий, насекомого, животного)
+   - Оцени серьезность (ядовитый/неядовитый, глубина раны, признаки аллергии)
+   - Дай пошаговые инструкции по первой помощи
+   - Укажи, когда НЕМЕДЛЕННО вызывать 112
+4. Серьезность ситуации (требуется ли срочная медицинская помощь)
+5. Первую помощь, которую можно оказать СЕЙЧАС
+6. Когда нужно срочно обратиться к врачу или вызвать 112
+
+ВАЖНО: Если не уверен в точной идентификации животного - честно скажи об этом и рекомендовай использовать интернет-поиск по описанию или обратиться к специалисту. Но все равно дай рекомендации по первой помощи на основе того, что видишь.
+
+${prompt ? `Дополнительный вопрос пользователя: ${prompt}` : ''}`
+        : `${medicalSystemPrompt}\n\nВопрос пользователя: ${prompt}`;
 
       const response = await fetch("/api/chat", {
         method: "POST",
@@ -176,12 +178,13 @@ ${userLocation ? `Пользователь находится в Казахст�
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          prompt: `${medicalSystemPrompt}\n\nВопрос пользователя: ${prompt}`,
+          prompt: enhancedPrompt,
           history: messages.slice(-5).map((m) => ({
             role: m.author === "user" ? ("user" as const) : ("assistant" as const),
             content: m.text,
           })),
           coords: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : null,
+          image: selectedImage || undefined, // Отправляем изображение, если есть
         }),
       });
 
@@ -214,162 +217,202 @@ ${userLocation ? `Пользователь находится в Казахст�
     }
   };
 
+  const sendButtonVariants: Variants = useMemo(
+    () => ({
+      hover: { scale: 1.05, boxShadow: '0 12px 30px rgba(0, 199, 127, 0.4)' },
+      tap: { scale: 0.92 },
+      idle: { scale: 1 },
+    }),
+    [],
+  );
+
   return (
-    <main className="min-h-screen bg-white flex flex-col pt-20">
-      {/* Hero Section */}
-      <section className="px-4 sm:px-6 lg:px-8 py-8 bg-gradient-to-br from-[#006948] via-[#008A6A] to-[#00D592]">
-        <div className="max-w-6xl mx-auto">
-          <BlurFade inView>
-            <div className="text-center text-white">
-              <div className="flex items-center justify-center gap-4 mb-4">
-                <Link
-                  href="/safety"
-                  className="flex-shrink-0 rounded-full p-2 hover:bg-white/20 transition"
-                  aria-label="Назад к безопасности"
-                >
-                  <ArrowLeft className="w-5 h-5 text-white" />
-                </Link>
-                <TextAnimate
-                  as="h2"
-                  animation="slideUp"
-                  by="word"
-                  className="font-tapestry text-3xl sm:text-4xl lg:text-5xl tracking-[-0.08em]"
-                >
-                  ИИ-Медик готов помочь
-                </TextAnimate>
-                <a
-                  href="tel:112"
-                  className="flex-shrink-0 rounded-full bg-red-600 hover:bg-red-700 px-4 py-2 text-white text-sm font-semibold flex items-center gap-2 transition"
-                >
-                  <Phone className="w-4 h-4" />
-                  <span className="hidden sm:inline">112</span>
-                </a>
-              </div>
-              <TextAnimate
-                as="p"
-                animation="slideUp"
-                by="word"
-                delay={0.2}
-                className="mt-4 text-lg sm:text-xl tracking-[-0.03em] text-white/90 max-w-2xl mx-auto"
-              >
-                В экстренных ситуациях наш ИИ-помощник предоставит пошаговые инструкции по оказанию первой помощи и подскажет ближайшие медицинские учреждения.
-              </TextAnimate>
-              <div className="mt-6 flex items-center justify-center gap-2 text-sm text-white/80">
-                <AlertCircle className="w-4 h-4" />
-                <span>В критических ситуациях немедленно вызывайте 112</span>
-              </div>
-            </div>
-          </BlurFade>
-        </div>
-      </section>
-
-      {/* Quick Prompts */}
-      {messages.length === 0 && (
-        <section className="px-4 sm:px-6 lg:px-8 py-8 bg-[#F8FFFB]">
-          <div className="max-w-6xl mx-auto">
-            <BlurFade inView>
-              <p className="text-sm uppercase tracking-[0.3em] text-[#006948] mb-4 text-center">Быстрые вопросы</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {medicalPrompts.map((prompt) => (
-                  <button
-                    key={prompt.title}
-                    onClick={() => handleSend(undefined, prompt.prompt)}
-                    className="rounded-2xl border border-[#006948]/20 bg-white p-4 text-left hover:border-[#006948] hover:shadow-lg transition-all"
-                  >
-                    <h3 className="font-semibold text-[#006948] mb-1">{prompt.title}</h3>
-                    <p className="text-xs text-[#4A4A4A]">{prompt.description}</p>
-                  </button>
-                ))}
-              </div>
-            </BlurFade>
+    <div className="flex h-[calc(100vh-4rem)] flex-col bg-white pt-16 lg:pt-20">
+      <div className="flex flex-1 flex-col overflow-hidden px-8 py-6 lg:px-16 xl:px-24">
+        {/* Compact Header */}
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/safety"
+              className="flex-shrink-0 rounded-full p-2 hover:bg-[#F4FFFA] transition"
+              aria-label="Назад к безопасности"
+            >
+              <ArrowLeft className="h-5 w-5 text-[#006948]" />
+            </Link>
+            <h1 className="font-tapestry text-2xl tracking-[-0.08em] text-[#0F2D1E]">
+              ИИ-Медик
+            </h1>
           </div>
-        </section>
-      )}
+          <a
+            href="tel:112"
+            className="flex-shrink-0 rounded-full bg-red-600 hover:bg-red-700 px-3 py-1.5 text-white text-xs font-semibold flex items-center gap-1.5 transition"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>112</span>
+          </a>
+        </div>
 
-      {/* Chat Section */}
-      <section className="flex-1 flex flex-col max-w-6xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
-        <div
-          ref={chatContainerRef}
-          className="flex-1 overflow-y-auto mb-4 space-y-4 min-h-0"
-          style={{ WebkitOverflowScrolling: "touch" }}
-        >
-          {messages.length === 0 ? (
-            <div className="text-center py-12">
-              <Stethoscope className="w-16 h-16 text-[#006948]/20 mx-auto mb-4" />
-              <p className="text-[#4A4A4A]">Начните диалог с ИИ-Медиком</p>
-              <p className="text-sm text-[#7A7A7A] mt-2">Выберите быстрый вопрос выше или напишите свой</p>
-            </div>
-          ) : (
-            <AnimatePresence>
-              {messages.map((message) => (
-                <motion.div
-                  key={message.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  className={`flex ${message.author === "user" ? "justify-end" : "justify-start"}`}
+        {/* Messages */}
+        <div className="mt-3 flex-1 space-y-4 overflow-y-auto px-6 lg:min-h-0 lg:px-8">
+          <AnimatePresence initial={false}>
+            {messages.map((message) => (
+              <motion.div
+                key={message.id}
+                variants={messageVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                className={`flex ${message.author === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[65%] sm:max-w-[60%] lg:max-w-[55%] tracking-[-0.03em] rounded-2xl border px-4 py-3 text-left text-sm leading-relaxed shadow-sm break-words ${
+                    message.author === 'user'
+                      ? 'border-[#006948]/20 bg-gradient-to-br from-[#E8FFF4] to-white text-[#0F2D1E]'
+                      : 'border-[#006948]/10 bg-white text-[#3F4A46]'
+                  }`}
+                  style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}
                 >
-                  <div
-                    className={`max-w-[80%] sm:max-w-[70%] rounded-3xl px-4 py-3 ${
-                      message.author === "user"
-                        ? "bg-[#006948] text-white"
-                        : "bg-[#F8FFFB] border border-[#006948]/20 text-[#111]"
-                    }`}
-                  >
-                    {message.author === "ai" ? (
-                      <div className="text-sm break-words leading-relaxed">
-                        {formatAIText(message.text)}
-                      </div>
-                    ) : (
-                      <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
-                    )}
-                    <p
-                      className={`text-xs mt-2 ${
-                        message.author === "user" ? "text-white/70" : "text-[#7A7A7A]"
-                      }`}
-                    >
-                      {message.timestamp}
-                    </p>
+                  {message.image && (
+                    <div className="mb-2 rounded-lg overflow-hidden">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img 
+                        src={message.image} 
+                        alt="Прикрепленное изображение" 
+                        className="max-w-full h-auto max-h-64 object-contain rounded-lg"
+                      />
+                    </div>
+                  )}
+                  {message.text && <p className="break-words whitespace-pre-wrap" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{sanitizeAIResponse(message.text)}</p>}
+                  <span className="mt-2 block text-[11px] tracking-[-0.07em] text-[#8B8B8B]">
+                    {message.timestamp}
+                  </span>
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+          <AnimatePresence>
+            {isGenerating && (
+              <motion.div
+                key="ai-typing"
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -10 }}
+                transition={{ duration: 0.2 }}
+                className="flex justify-start"
+              >
+                <div className="flex items-center gap-2 rounded-2xl border border-[#006948]/10 bg-white px-4 py-3 text-[#3F4A46] shadow-sm">
+                  <span className="text-xs font tracking-[0.-0.07em] text-[#00A36C]">ИИ-Медик</span>
+                  <div className="flex" aria-label="AI typing" role="status">
+                    {[0, 1, 2].map((dot) => (
+                      <motion.span
+                        key={dot}
+                        className="h-2 w-2 rounded-full bg-[#00A36C]"
+                        variants={typingDotVariants}
+                        custom={dot}
+                        animate="animate"
+                      />
+                    ))}
                   </div>
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          )}
-          {isGenerating && (
-            <div className="flex justify-start">
-              <div className="bg-[#F8FFFB] border border-[#006948]/20 rounded-3xl px-4 py-3 flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin text-[#006948]" />
-                <span className="text-sm text-[#4A4A4A]">ИИ-Медик думает...</span>
-              </div>
-            </div>
-          )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Form */}
-        <form onSubmit={handleSend} className="flex gap-3">
-          <input
-            type="text"
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Опишите ситуацию или задайте вопрос..."
-            className="flex-1 rounded-full border border-[#006948]/20 bg-[#F8FFFB] px-6 py-3 text-[#111] focus:outline-none focus:ring-2 focus:ring-[#006948]"
-            disabled={isGenerating}
-          />
-          <button
-            type="submit"
-            disabled={!inputValue.trim() || isGenerating}
-            className="flex-shrink-0 rounded-full bg-[#006948] hover:bg-[#008A6A] disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 text-white transition hover:-translate-y-0.5 flex items-center justify-center gap-2"
+        {/* Prompts */}
+        <div className="mt-3">
+          {showPrompts && (
+            <div className="flex flex-wrap gap-2">
+              {medicalPrompts.map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => handlePromptClick(prompt)}
+                  className="rounded-xl border border-dashed border-[#006948]/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-[#006948] transition hover:border-[#00A36C] hover:text-[#00A36C]"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Image Preview */}
+          {selectedImage && (
+            <div className="mt-4 relative inline-block">
+              <div className="relative rounded-lg overflow-hidden border-2 border-[#006948]/20 bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img 
+                  src={selectedImage} 
+                  alt="Предпросмотр" 
+                  className="max-w-xs max-h-32 object-contain"
+                />
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(null)}
+                  className="absolute top-1 right-1 rounded-full bg-red-500 text-white p-1 hover:bg-red-600 transition"
+                  aria-label="Удалить изображение"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Input Form */}
+          <form
+            onSubmit={handleSend}
+            className="mt-4 flex items-center gap-3 rounded-xl border border-[#006948]/20 bg-white px-4 py-2"
           >
-            {isGenerating ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
-        </form>
-      </section>
-    </main>
+            <input
+              type="file"
+              accept="image/*"
+              id="image-upload-medic"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  try {
+                    const base64 = await convertImageToBase64(file);
+                    setSelectedImage(base64);
+                  } catch (error) {
+                    console.error('Failed to convert image:', error);
+                  }
+                }
+              }}
+              disabled={isGenerating}
+            />
+            <label
+              htmlFor="image-upload-medic"
+              className="cursor-pointer inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#006948]/20 text-[#006948] transition hover:bg-[#F4FFFA] disabled:opacity-60"
+              aria-label="Прикрепить изображение"
+            >
+              <Image className="h-4 w-4" />
+            </label>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={(event) => setInputValue(event.target.value)}
+              placeholder={selectedImage ? "Опишите изображение..." : "Опишите ситуацию или задайте вопрос"}
+              className="flex-1 bg-transparent text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:outline-none"
+              disabled={isGenerating}
+            />
+            <motion.button
+              type="submit"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#00A36C] text-white transition hover:bg-[#00c77f] disabled:opacity-60"
+              aria-label="Отправить сообщение"
+              disabled={isGenerating || (!inputValue.trim() && !selectedImage)}
+              variants={sendButtonVariants}
+              initial="idle"
+              whileHover="hover"
+              whileTap="tap"
+            >
+              <SendHorizonal className={`h-4 w-4 ${isGenerating ? 'animate-pulse' : ''}`} />
+            </motion.button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 }
 

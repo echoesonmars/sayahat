@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { TextAnimate } from "@/components/ui/text-animate";
 import { useSession } from "next-auth/react";
-import { Hotel, Train, Plane, Car, Bus, Calendar, MapPin, Star, ArrowRight, Route, Clock } from "lucide-react";
+import { Hotel, Train, Plane, Car, Bus, Calendar, MapPin, Star, ArrowRight, Route, Clock, Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { RouteInstruction } from "@/lib/geo";
@@ -421,6 +421,7 @@ export default function BookingPage() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("hotels");
+  const [tripSearchQuery, setTripSearchQuery] = useState<string>("");
 
   useEffect(() => {
     async function fetchPlans() {
@@ -754,8 +755,33 @@ export default function BookingPage() {
             </div>
           </BlurFade>
 
+          {/* Поиск по маршрутам */}
+          <div className="mb-6">
+            <div className="relative max-w-md">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A]" />
+              <input
+                type="text"
+                value={tripSearchQuery}
+                onChange={(e) => setTripSearchQuery(e.target.value)}
+                placeholder="Поиск по маршрутам, городам, описанию..."
+                className="w-full pl-11 pr-4 py-3 rounded-full border border-[#006948]/20 bg-white text-[#0F2D1E] placeholder:text-[#93A39C] focus:outline-none focus:ring-2 focus:ring-[#006948] transition"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {readyTrips.map((trip, index) => (
+            {readyTrips
+              .filter((trip) => {
+                if (!tripSearchQuery.trim()) return true;
+                const query = tripSearchQuery.toLowerCase();
+                return (
+                  trip.title.toLowerCase().includes(query) ||
+                  trip.city.toLowerCase().includes(query) ||
+                  trip.description.toLowerCase().includes(query) ||
+                  trip.locations.some((loc) => loc.name.toLowerCase().includes(query) || loc.type.toLowerCase().includes(query))
+                );
+              })
+              .map((trip, index) => (
               <BlurFade key={trip.id} inView delay={0.3 + index * 0.05}>
                 <div className="rounded-3xl border border-[#006948]/20 bg-white p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col">
                   <div className="flex items-start justify-between mb-4">

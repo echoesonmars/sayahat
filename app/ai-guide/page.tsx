@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Copy, Check, X, MessageSquare, List, Map } from 'lucide-react';
+import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Copy, Check, X, MessageSquare, List, Map, Image, XCircle } from 'lucide-react';
 import { AnimatePresence, motion, Variants } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
 import type { LatLngExpression } from 'leaflet';
@@ -23,16 +23,10 @@ type Message = {
   author: 'user' | 'ai';
   text: string;
   timestamp: string;
+  image?: string; // base64 изображение
 };
 
 const presetMessages: Message[] = [];
-
-const quickPrompts = [
-  'что сделать вечером поблизости',
-  'обнови транспорт до алматы',
-  'подскажи погоду на завтра',
-  'мне нужен гид на субботу',
-];
 
 const chatTabs = [
   { id: 'plans', label: 'AI-гид', helper: 'Помощник', icon: MessageSquare },
@@ -225,6 +219,23 @@ function parsePlanAndNote(rawText: string): { text: string; plan: ParsedPlan | n
   return { text: cleanedText, plan: parsedPlan, note: parsedNote };
 }
 
+// Функция для конвертации файла в base64
+function convertImageToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        resolve(result);
+      } else {
+        reject(new Error('Failed to convert image to base64'));
+      }
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 // Tab Content Components
 function PlansTab({
   messages,
@@ -234,8 +245,8 @@ function PlansTab({
   isGenerating,
   chatError,
   handleSend,
-  handlePromptClick,
-  quickPrompts,
+  selectedImage,
+  setSelectedImage,
 }: {
   messages: Message[];
   inputValue: string;
@@ -244,8 +255,8 @@ function PlansTab({
   isGenerating: boolean;
   chatError: string | null;
   handleSend: (e: React.FormEvent<HTMLFormElement>) => void;
-  handlePromptClick: (prompt: string) => void;
-  quickPrompts: string[];
+  selectedImage: string | null;
+  setSelectedImage: (image: string | null) => void;
 }) {
   const sendButtonVariants: Variants = useMemo(
     () => ({
@@ -276,7 +287,17 @@ function PlansTab({
                     : 'border-[#006948]/10 bg-white text-[#3F4A46]'
                 }`}
               >
-                <p>{message.text}</p>
+                {message.image && (
+                  <div className="mb-2 rounded-lg overflow-hidden">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img 
+                      src={message.image} 
+                      alt="Прикрепленное изображение" 
+                      className="max-w-full h-auto max-h-64 object-contain rounded-lg"
+                    />
+                  </div>
+                )}
+                {message.text && <p>{message.text}</p>}
                 <span className="mt-2 block text-[11px] tracking-[-0.07em] text-[#8B8B8B]">
                   {message.timestamp}
                 </span>
@@ -315,29 +336,67 @@ function PlansTab({
 
       <div className="mt-3">
         {showPrompts && (
-          <div className="flex flex-wrap gap-2">
-            {quickPrompts.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                onClick={() => handlePromptClick(prompt)}
-                className="rounded-xl border border-dashed border-[#006948]/30 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-[#006948] transition hover:border-[#00A36C] hover:text-[#00A36C]"
-              >
-                {prompt}
-              </button>
-            ))}
+          <div className="rounded-xl border border-[#006948]/20 bg-gradient-to-br from-[#F8FFFB] to-white px-4 py-3 mb-4">
+            <p className="text-xs text-[#4A4A4A] leading-relaxed">
+              <span className="font-semibold text-[#006948]">💡 Подсказка:</span> ИИ может автоматически создавать и сохранять ваши планы, заметки и маршруты. Просто попросите его сохранить план или заметку, и он запишет их автоматически.
+            </p>
           </div>
         )}
 
+        {selectedImage && (
+          <div className="mt-4 relative inline-block">
+            <div className="relative rounded-lg overflow-hidden border-2 border-[#006948]/20">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img 
+                src={selectedImage} 
+                alt="Предпросмотр" 
+                className="max-w-xs max-h-32 object-contain"
+              />
+              <button
+                type="button"
+                onClick={() => setSelectedImage(null)}
+                className="absolute top-1 right-1 rounded-full bg-red-500 text-white p-1 hover:bg-red-600 transition"
+                aria-label="Удалить изображение"
+              >
+                <XCircle className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
         <form
           onSubmit={handleSend}
           className="mt-4 flex items-center gap-3 rounded-xl border border-[#006948]/20 bg-white px-4 py-2"
         >
           <input
+            type="file"
+            accept="image/*"
+            id="image-upload"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) {
+                try {
+                  const base64 = await convertImageToBase64(file);
+                  setSelectedImage(base64);
+                } catch (error) {
+                  console.error('Failed to convert image:', error);
+                }
+              }
+            }}
+            disabled={isGenerating}
+          />
+          <label
+            htmlFor="image-upload"
+            className="cursor-pointer inline-flex h-10 w-10 items-center justify-center rounded-full border border-[#006948]/20 text-[#006948] transition hover:bg-[#F4FFFA] disabled:opacity-60"
+            aria-label="Прикрепить изображение"
+          >
+            <Image className="h-4 w-4" />
+          </label>
+          <input
             type="text"
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
-            placeholder="Опишите задачу на ближайший час"
+            placeholder={selectedImage ? "Опишите изображение..." : "Опишите задачу на ближайший час"}
             className="flex-1 bg-transparent text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:outline-none"
             disabled={isGenerating}
           />
@@ -345,7 +404,7 @@ function PlansTab({
             type="submit"
             className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#00A36C] text-white transition hover:bg-[#00c77f] disabled:opacity-60"
             aria-label="Отправить сообщение"
-            disabled={isGenerating}
+            disabled={isGenerating || (!inputValue.trim() && !selectedImage)}
             variants={sendButtonVariants}
             initial="idle"
             whileHover="hover"
@@ -638,32 +697,32 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
               const canOpenOnMap = locationsWithCoords.length > 0;
 
               return (
-                <motion.div
-                  key={plan._id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{plan.title}</h3>
+            <motion.div
+              key={plan._id}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h3 className="text-sm font-semibold tracking-[-0.03em] text-[#0F2D1E]">{plan.title}</h3>
                       {('description' in plan && typeof plan.description === 'string') && (
                         <p className="mt-1 text-xs text-[#7A7A7A] line-clamp-2">{plan.description}</p>
                       )}
-                      <div className="mt-2 flex items-center gap-4 text-xs text-[#7A7A7A]">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {plan.date || 'Без даты'}
-                        </span>
-                        {plan.locations && (
-                          <span className="flex items-center gap-1">
-                            <MapPinned className="h-3 w-3" />
-                            {plan.locations.length} локаций
+                  <div className="mt-2 flex items-center gap-4 text-xs text-[#7A7A7A]">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {plan.date || 'Без даты'}
+                    </span>
+                    {plan.locations && (
+                      <span className="flex items-center gap-1">
+                        <MapPinned className="h-3 w-3" />
+                        {plan.locations.length} локаций
                             {canOpenOnMap && ` (${locationsWithCoords.length} с координатами)`}
-                          </span>
-                        )}
-                      </div>
+                      </span>
+                    )}
+                  </div>
                       {canOpenOnMap && (
                         <button
                           type="button"
@@ -705,16 +764,16 @@ function SharedPlansTab({ refreshTrigger, onRouteBuild }: { refreshTrigger?: num
                           ⚠️ У мест в этом плане нет координат. Попросите AI-гид добавить координаты.
                         </p>
                       )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePlan(plan._id)}
-                      className="ml-2 rounded-lg p-2 text-[#7A7A7A] transition hover:bg-[#F4FFFA] hover:text-[#006948]"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  </div>
-                </motion.div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleDeletePlan(plan._id)}
+                  className="ml-2 rounded-lg p-2 text-[#7A7A7A] transition hover:bg-[#F4FFFA] hover:text-[#006948]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </motion.div>
               );
             })()
           ))}
@@ -1646,7 +1705,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
       setSearchResults([]);
     }
 
-    setIsSearching(true);
+      setIsSearching(true);
     setSearchError(null);
 
     const fetchPlaces = async () => {
@@ -1655,7 +1714,7 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         
         if (selectedCategory) {
           // Поиск по категории
-          const params = new URLSearchParams({
+        const params = new URLSearchParams({
             category: selectedCategory,
             limit: '15',
           });
@@ -1667,10 +1726,10 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
             params.append('city', selectedCity);
           }
 
-          if (userLocation) {
-            params.append('lat', userLocation.lat.toString());
-            params.append('lng', userLocation.lng.toString());
-          }
+        if (userLocation) {
+          params.append('lat', userLocation.lat.toString());
+          params.append('lng', userLocation.lng.toString());
+        }
 
           console.log('[SearchTab] Fetching category:', selectedCategory);
 
@@ -1831,25 +1890,25 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         <div className="mt-3">
           <p className="text-xs text-[#7A7A7A] mb-2 text-center">или</p>
           <p className="text-xs text-[#7A7A7A] mb-2 text-center">поищите написав что вы хотите и где</p>
-          <div className="relative">
+        <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93A39C] flex-shrink-0" />
-            <input
-              type="text"
-              value={searchQuery}
+          <input
+            type="text"
+            value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setSelectedCategory(null); // Сбрасываем категорию при вводе текста
               }}
               placeholder="Например: ресторан в Алматы, музей в Шымкенте..."
               className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20"
-            />
-            {isSearching && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#006948] border-t-transparent"></div>
-              </div>
-            )}
-          </div>
+          />
+          {isSearching && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#006948] border-t-transparent"></div>
+            </div>
+          )}
         </div>
+      </div>
       </div>
 
       {/* Модальное окно выбора категорий */}
@@ -1980,17 +2039,17 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
                 <p className="text-lg font-semibold text-[#006948] mt-1">{avgPrice.toLocaleString()} ₸</p>
               </div>
             )}
-            <AnimatePresence>
+          <AnimatePresence>
               {searchResults.map((result) => {
                 const minutes = calculateMinutes(result.distanceKm);
                 return (
-                  <motion.div
-                    key={result.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
-                  >
+              <motion.div
+                key={result.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="rounded-xl border border-[#006948]/10 bg-white p-4 shadow-sm transition hover:border-[#006948]/20 hover:shadow-md"
+              >
                     <div className="flex flex-col gap-3">
                       <div>
                         <h3 className="text-base font-semibold tracking-[-0.03em] text-[#0F2D1E] break-words">
@@ -2002,30 +2061,30 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
                       </div>
 
                       <div className="flex flex-wrap items-center gap-3 text-xs text-[#7A7A7A]">
-                        {result.distanceKm && (
-                          <span className="flex items-center gap-1">
-                            <MapPinned className="h-3 w-3" />
-                            {formatDistance(result.distanceKm)}
+                      {result.distanceKm && (
+                        <span className="flex items-center gap-1">
+                          <MapPinned className="h-3 w-3" />
+                          {formatDistance(result.distanceKm)}
                             {minutes && ` · ~${minutes} мин`}
-                          </span>
-                        )}
-                        {result.price_kzt && (
+                        </span>
+                      )}
+                      {result.price_kzt && (
                           <span className="text-[#006948] font-medium">
                             Средний прайс: {result.price_kzt.toLocaleString()} ₸
                           </span>
-                        )}
-                      </div>
+                      )}
+                    </div>
 
-                      {(() => {
-                        const addrPlace = result.tags?.['addr:place'];
-                        return typeof addrPlace === 'string' && addrPlace && (
+                    {(() => {
+                      const addrPlace = result.tags?.['addr:place'];
+                      return typeof addrPlace === 'string' && addrPlace && (
                           <p className="text-xs text-[#93A39C] break-words">{addrPlace}</p>
-                        );
-                      })()}
+                      );
+                    })()}
 
                       <div className="flex flex-col sm:flex-row gap-2 mt-2">
-                        <button
-                          type="button"
+                  <button
+                    type="button"
                           onClick={() => handleViewOnMap(result)}
                           className="flex-1 rounded-lg border border-[#006948]/20 bg-white px-4 py-2 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
                         >
@@ -2037,13 +2096,13 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
                           className="flex-1 rounded-lg bg-[#006948] px-4 py-2 text-xs font-medium text-white transition hover:bg-[#008A6A]"
                         >
                           Построить маршрут
-                        </button>
+                  </button>
                       </div>
-                    </div>
-                  </motion.div>
+                </div>
+              </motion.div>
                 );
               })}
-            </AnimatePresence>
+          </AnimatePresence>
           </>
         ) : null}
       </div>
@@ -2219,6 +2278,7 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
   const [templates, setTemplates] = useState<Array<{ id: string; title: string; description: string; rating: number; duration: string; city?: string; route?: RouteInstruction }>>([
     ...readyTripsForTemplates,
   ]);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   useEffect(() => {
     // Загружаем трип из localStorage, если он был передан со страницы бронирования
@@ -2241,24 +2301,56 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
             const filtered = prev.filter(t => t.id !== 'booking-trip');
             return [tripFromBooking, ...filtered];
           });
+          // Автоматически строим маршрут на карте
+          if (onRouteBuild && route) {
+            onRouteBuild(route);
+          }
           localStorage.removeItem('readyTripRoute');
         } catch (error) {
           console.error('Failed to parse saved trip route', error);
         }
       }
     }
-  }, []);
+  }, [onRouteBuild]);
+
+  const filteredTemplates = templates.filter((template) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+  return (
+      template.title.toLowerCase().includes(query) ||
+      (template.city && template.city.toLowerCase().includes(query)) ||
+      template.description.toLowerCase().includes(query)
+    );
+  });
 
   return (
-    <div className="mt-3 flex-1 space-y-3 overflow-y-auto pr-2 lg:min-h-0">
-      {templates.length === 0 ? (
-        <div className="flex h-full flex-col items-center justify-center text-center">
+    <div className="mt-3 flex-1 flex flex-col min-h-0 relative">
+      {/* Поиск */}
+      <div className="mb-4 flex-shrink-0 relative z-20 bg-white">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A] pointer-events-none z-10" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Поиск по маршрутам, городам, описанию..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-[#006948]/20 bg-white text-sm text-[#0F2D1E] placeholder:text-[#93A39C] focus:outline-none focus:ring-2 focus:ring-[#006948] transition relative z-10 shadow-sm"
+          />
+        </div>
+      </div>
+
+      {/* Список маршрутов */}
+      <div className="flex-1 space-y-3 overflow-y-auto pr-2 min-h-0 relative z-0">
+        {filteredTemplates.length === 0 ? (
+          <div className="flex h-full flex-col items-center justify-center text-center py-8">
           <Route className="h-12 w-12 text-[#006948]/30" />
-          <p className="mt-4 text-sm text-[#7A7A7A]">Нет доступных шаблонов</p>
+            <p className="mt-4 text-sm text-[#7A7A7A]">
+              {searchQuery ? "Ничего не найдено" : "Нет доступных шаблонов"}
+            </p>
         </div>
       ) : (
         <AnimatePresence>
-          {templates.map((template) => (
+            {filteredTemplates.map((template) => (
             <motion.div
               key={template.id}
               initial={{ opacity: 0, y: 10 }}
@@ -2301,18 +2393,19 @@ function TemplatesTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstructio
                       На карте
                     </button>
                   )}
-                  <button
-                    type="button"
-                    className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
-                  >
-                    Использовать
-                  </button>
+                <button
+                  type="button"
+                  className="ml-2 rounded-lg border border-[#006948]/20 bg-white px-3 py-1.5 text-xs font-medium text-[#006948] transition hover:bg-[#F4FFFA]"
+                >
+                  Использовать
+                </button>
                 </div>
               </div>
             </motion.div>
           ))}
         </AnimatePresence>
       )}
+      </div>
     </div>
   );
 }
@@ -2323,6 +2416,7 @@ function AIGuidePageContent() {
   const searchParams = useSearchParams();
   const [messages, setMessages] = useState<Message[]>(presetMessages);
   const [inputValue, setInputValue] = useState('');
+  const [selectedImage, setSelectedImage] = useState<string | null>(null); // base64 изображение
   const [position, setPosition] = useState<LatLngExpression | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [geoError, setGeoError] = useState(false);
@@ -2466,6 +2560,21 @@ function AIGuidePageContent() {
     return () => navigator.geolocation.clearWatch(watcherId);
   }, []);
 
+  // Обработка параметра tab из URL
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (tabParam && chatTabs.some(tab => tab.id === tabParam)) {
+      setActiveTab(tabParam);
+      // Очищаем параметр tab из URL
+      const newSearchParams = new URLSearchParams(searchParams.toString());
+      newSearchParams.delete('tab');
+      const newUrl = newSearchParams.toString() 
+        ? `/ai-guide?${newSearchParams.toString()}`
+        : '/ai-guide';
+      router.replace(newUrl);
+    }
+  }, [searchParams, router]);
+
   // Обработка URL параметров для построения маршрута
   useEffect(() => {
     const routeParam = searchParams.get('route');
@@ -2509,9 +2618,6 @@ function AIGuidePageContent() {
 
   const activeHelper = chatTabs.find((tab) => tab.id === activeTab)?.helper;
 
-  function handlePromptClick(prompt: string) {
-    setInputValue(prompt);
-  }
 
   // Функция для определения намерения пользователя и извлечения текста
   function detectUserIntent(text: string): { wantsPlan: boolean; wantsNote: boolean; content: string } {
@@ -2561,21 +2667,23 @@ function AIGuidePageContent() {
   async function handleSend(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = inputValue.trim();
-    if (!trimmed || isGenerating) return;
+    if ((!trimmed && !selectedImage) || isGenerating) return;
 
     const timestamp = new Date().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
     const userMessage: Message = {
       id: generateId(),
       author: 'user',
-      text: trimmed,
+      text: trimmed || (selectedImage ? 'Смотри изображение' : ''),
       timestamp,
+      image: selectedImage || undefined,
     };
 
     const nextMessages = [...messages, userMessage];
 
     setMessages(nextMessages);
     setInputValue('');
+    setSelectedImage(null); // Очищаем изображение после отправки
     setShowPrompts(false);
     setIsGenerating(true);
     setChatError(null);
@@ -2700,7 +2808,7 @@ function AIGuidePageContent() {
     }
     
     // Если не план и не заметка, продолжаем обычный диалог с AI
-    const enhancedPrompt = trimmed;
+    const enhancedPrompt = trimmed || (selectedImage ? 'Проанализируй это изображение и найди похожие места в Казахстане. Опиши, что ты видишь на изображении и предложи места из базы данных, которые могут быть похожи или связаны с этим изображением.' : '');
 
     const conversationHistory = nextMessages.slice(-6).map((message) => ({
       role: message.author === 'user' ? 'user' : 'assistant',
@@ -2718,6 +2826,7 @@ function AIGuidePageContent() {
           prompt: enhancedPrompt,
           history: conversationHistory,
           coords: coordsPayload,
+          image: selectedImage || undefined, // Отправляем изображение, если есть
         }),
       });
 
@@ -2967,7 +3076,7 @@ function AIGuidePageContent() {
             </div>
 
             <div className="mt-2 h-[60vh] overflow-hidden rounded-[24px] border border-[#006948]/15 bg-white p-4 lg:mt-4 lg:h-auto lg:flex-1 lg:overflow-hidden">
-              <div className="flex h-full flex-col lg:min-h-0 overflow-hidden">
+              <div className="flex h-full flex-col lg:min-h-0">
                 <div className="flex items-center gap-2 text-xs tracking-[-0.05em] text-[#7A7A7A]">
                   <MapPinned className="h-4 w-4 text-[#00A36C]" />
                   <span className="tracking-[-0.07em] text-[#2A3C36]">{activeHelper}</span>
@@ -2990,8 +3099,8 @@ function AIGuidePageContent() {
                         isGenerating={isGenerating}
                         chatError={chatError}
                         handleSend={handleSend}
-                        handlePromptClick={handlePromptClick}
-                        quickPrompts={quickPrompts}
+                        selectedImage={selectedImage}
+                        setSelectedImage={setSelectedImage}
                       />
                     </motion.div>
                   )}
@@ -3064,7 +3173,7 @@ function AIGuidePageContent() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 10 }}
                       transition={{ duration: 0.2 }}
-                      className="flex h-full flex-col lg:min-h-0"
+                      className="flex h-full flex-col lg:min-h-0 overflow-visible"
                     >
                       <TemplatesTab 
                         onRouteBuild={(route) => {

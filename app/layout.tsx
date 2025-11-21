@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 import Navbar from "./components/Header";
-import { SiteFooter } from "./components/SiteFooter";
+import { ConditionalFooter } from "./components/ConditionalFooter";
 import { SessionProvider } from "./components/SessionProvider";
 
 
@@ -42,7 +42,7 @@ export default function RootLayout({
         <SessionProvider>
         <Navbar />
         {children}
-        <SiteFooter />
+        <ConditionalFooter />
         </SessionProvider>
       </body>
     </html>

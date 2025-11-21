@@ -12,6 +12,7 @@ type ChatRequestBody = {
   prompt?: string;
   history?: HistoryMessage[];
   coords?: Coordinates;
+  image?: string; // base64 изображение
 };
 
 const SYSTEM_PROMPT = `Ты — Sayahat, AI-гид по Казахстану. Отвечай кратко на русском.
@@ -231,13 +232,36 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Формируем сообщение пользователя с изображением, если есть
+  const userMessageContent: Array<{ type: 'text' | 'image_url'; text?: string; image_url?: { url: string } }> = [
+    { type: 'text', text: prompt },
+  ];
+  
+  if (body?.image) {
+    // Добавляем изображение в сообщение
+    userMessageContent.push({
+      type: 'image_url',
+      image_url: { url: body.image },
+    });
+    
+    // Если есть изображение, добавляем специальный промпт для анализа
+    const imageAnalysisPrompt = `\n\nПользователь прикрепил изображение. Проанализируй его и:
+1. Опиши, что ты видишь на изображении
+2. Если это место, достопримечательность или здание - найди похожие места в базе данных Казахстана
+3. Если это природа, пейзаж - предложи похожие природные места из базы данных
+4. Если это еда, ресторан - предложи рестораны из базы данных
+5. Используй информацию из базы данных для поиска похожих мест`;
+    
+    userMessageContent[0].text = prompt + imageAnalysisPrompt;
+  }
+
   const messages = [
     { role: 'system' as const, content: SYSTEM_PROMPT },
     ...(locationContext ? [{ role: 'system' as const, content: locationContext }] : []),
     ...(citiesContext ? [{ role: 'system' as const, content: citiesContext }] : []),
     ...(dbPlacesContext ? [{ role: 'system' as const, content: dbPlacesContext }] : []),
     ...safeHistory,
-    { role: 'user' as const, content: prompt },
+    { role: 'user' as const, content: userMessageContent },
   ];
 
   try {
@@ -247,12 +271,12 @@ export async function POST(request: NextRequest) {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-        temperature: 0.7,
-        max_tokens: 500,
-        messages,
-      }),
+        body: JSON.stringify({
+          model: body?.image ? 'gpt-4o' : (process.env.OPENAI_MODEL ?? 'gpt-4o-mini'), // Используем gpt-4o для Vision API
+          temperature: 0.7,
+          max_tokens: body?.image ? 1500 : 500, // Больше токенов для детального анализа изображений
+          messages,
+        }),
     });
 
     if (!upstreamResponse.ok) {

@@ -8,20 +8,20 @@ const teamMembers = [
   {
     name: "Алимжан Жорабек",
     role: "Основатель & CEO",
-    description: "Стратегическое видение и развитие продукта",
-    image: "/images/team/team1.jpg", // Замените на реальные пути к фотографиям
+    description: "Full-stack разработчик, UX/UI дизайнер",
+    image: "/images/team1.jpg", // Замените на реальные пути к фотографиям
   },
   {
-    name: "Айдын Касымов",
-    role: "CTO & Lead Developer",
-    description: "Техническая архитектура и разработка платформы",
-    image: "/images/team/team2.jpg",
+    name: "Сырым Молдахул",
+    role: "Product Manager",
+    description: "Отвечает за разработку и жизненный цикл продукта",
+    image: "/images/team2.webp",
   },
   {
-    name: "Амина Нурланова",
-    role: "Head of Design & UX",
-    description: "Пользовательский опыт и визуальная идентичность",
-    image: "/images/team/team3.jpg",
+    name: "Алихан Аким",
+    role: "QA-инженер",
+    description: "Проверяет качество работы сервиса",
+    image: "/images/team3.webp",
   },
 ];
 
@@ -29,7 +29,7 @@ export default function AboutPage() {
   return (
     <main className="min-h-screen bg-white">
       {/* Team Section */}
-      <section className="px-4 sm:px-6 lg:px-8 py-16 sm:py-24 bg-gradient-to-b from-white to-[#F8FFFB]">
+      <section className="px-4 mt-[2rem] sm:px-6 lg:px-8 py-16 sm:py-24 bg-gradient-to-b from-white to-[#F8FFFB]">
         <div className="mx-auto max-w-6xl">
           <BlurFade inView>
             <div className="text-center mb-16">
