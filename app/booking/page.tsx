@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { TextAnimate } from "@/components/ui/text-animate";
 import { useSession } from "next-auth/react";
-import { Hotel, Train, Plane, Car, Bus, Calendar, MapPin, Star, ArrowRight, Route, Clock, Search } from "lucide-react";
+import { Hotel, Train, Plane, Car, Bus, Calendar, MapPin, Star, ArrowRight, Route, Clock, Search, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
 import type { RouteInstruction } from "@/lib/geo";
 
 interface Plan {
@@ -420,6 +421,8 @@ export default function BookingPage() {
   const [isLoadingPlans, setIsLoadingPlans] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("hotels");
   const [tripSearchQuery, setTripSearchQuery] = useState<string>("");
+  const [isBooking, setIsBooking] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function fetchPlans() {
@@ -442,16 +445,51 @@ export default function BookingPage() {
     fetchPlans();
   }, [session]);
 
-  const hasBookableItems = (plan: Plan) => {
+  const hasBookableItems = useCallback((plan: Plan) => {
     if (!plan.locations || plan.locations.length === 0) return false;
     const bookableKeywords = ["отель", "hotel", "гостиница", "транспорт", "поезд", "самолет", "автобус", "такси"];
     const planText = `${plan.title} ${plan.description || ""} ${plan.locations.map((l) => l.name).join(" ")}`.toLowerCase();
     return bookableKeywords.some((keyword) => planText.includes(keyword));
-  };
+  }, []);
 
-  const handleBook = (item: BookingItem) => {
+  const handleBook = useCallback(async (item: BookingItem) => {
+    setIsBooking(item.id);
+    // Симуляция бронирования
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    setIsBooking(null);
     alert(`Бронирование ${item.name} будет доступно в ближайшее время!`);
-  };
+  }, []);
+
+  // Фильтрация планов с мемоизацией
+  const filteredPlans = useMemo(() => {
+    return plans.filter(hasBookableItems);
+  }, [plans, hasBookableItems]);
+
+  // Фильтрация трипов с мемоизацией
+  const filteredTrips = useMemo(() => {
+    if (!tripSearchQuery.trim()) return readyTrips;
+    const query = tripSearchQuery.toLowerCase();
+    return readyTrips.filter((trip) => {
+      return (
+        trip.title.toLowerCase().includes(query) ||
+        trip.city.toLowerCase().includes(query) ||
+        trip.description.toLowerCase().includes(query) ||
+        trip.locations.some((loc) => loc.name.toLowerCase().includes(query) || loc.type.toLowerCase().includes(query))
+      );
+    });
+  }, [tripSearchQuery]);
+
+  // Обработка Escape для очистки поиска
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setTripSearchQuery('');
+        searchInputRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
 
   const handleUseTrip = (trip: ReadyTrip) => {
     if (typeof window !== "undefined") {
@@ -532,18 +570,25 @@ export default function BookingPage() {
 
           {session ? (
             isLoadingPlans ? (
-              <BlurFade inView delay={0.3}>
-                <div className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-12 text-center">
-                  <p className="text-[#4A4A4A]">Загрузка планов...</p>
-                </div>
-              </BlurFade>
-            ) : plans.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {plans
-                  .filter(hasBookableItems)
-                  .map((plan, index) => (
-                    <BlurFade key={plan._id} inView delay={0.3 + index * 0.05}>
-                      <div className="rounded-3xl border border-[#006948]/20 bg-white p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-12 text-center"
+              >
+                <Loader2 className="w-8 h-8 text-[#006948] mx-auto mb-4 animate-spin" />
+                <p className="text-[#4A4A4A]">Загрузка планов...</p>
+              </motion.div>
+            ) : filteredPlans.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {filteredPlans.map((plan, index) => (
+                    <motion.div
+                      key={plan._id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      whileHover={{ y: -4 }}
+                      className="rounded-2xl sm:rounded-3xl border border-[#006948]/20 bg-white p-4 sm:p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col transition-all duration-300 hover:shadow-[0_0_60px_rgba(0,105,72,0.12)]"
+                    >
                         <div className="flex items-start gap-3 mb-4">
                           <Calendar className="w-5 h-5 text-[#006948] flex-shrink-0 mt-1" />
                           <div className="flex-1 min-w-0">
@@ -569,33 +614,53 @@ export default function BookingPage() {
                             </div>
                           </div>
                         )}
-                        <button
+                        <motion.button
                           onClick={() => handleBook({ id: plan._id, name: plan.title, category: "План", description: plan.description || "", rating: 0, price: "", location: "" })}
-                          className="mt-auto w-full rounded-full bg-[#006948] hover:bg-[#008A6A] px-6 py-3 text-white text-sm font-semibold tracking-[0.2em] transition hover:-translate-y-0.5 hover:shadow-lg flex items-center justify-center gap-2"
+                          disabled={isBooking === plan._id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          className="mt-auto w-full rounded-full bg-[#006948] hover:bg-[#008A6A] px-6 py-3 text-white text-sm font-semibold tracking-[0.2em] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                         >
-                          <span>Забронировать</span>
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </BlurFade>
-                  ))}
+                          {isBooking === plan._id ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Бронируем...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Забронировать</span>
+                              <ArrowRight className="w-4 h-4" />
+                            </>
+                          )}
+                        </motion.button>
+                      </motion.div>
+                    ))}
               </div>
             ) : (
-              <BlurFade inView delay={0.3}>
-                <div className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-12 text-center">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+                className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-12 text-center"
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: 0.2, type: "spring" }}
+                >
                   <Calendar className="w-12 h-12 text-[#006948] mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-[#006948] mb-2">Нет планов с бронируемыми элементами</p>
-                  <p className="text-sm text-[#4A4A4A] mb-6">
-                    Создайте план путешествия в AI-гиде, и здесь появятся доступные бронирования
-                  </p>
-                  <Link
-                    href="/ai-guide"
-                    className="inline-flex items-center justify-center rounded-full bg-[#006948] px-6 py-3 text-sm font-semibold tracking-[0.3em] text-white transition hover:-translate-y-0.5"
-                  >
-                    Создать план
-                  </Link>
-                </div>
-              </BlurFade>
+                </motion.div>
+                <p className="text-lg font-semibold text-[#006948] mb-2">Нет планов с бронируемыми элементами</p>
+                <p className="text-sm text-[#4A4A4A] mb-6">
+                  Создайте план путешествия в AI-гиде, и здесь появятся доступные бронирования
+                </p>
+                <Link
+                  href="/ai-guide"
+                  className="inline-flex items-center justify-center rounded-full bg-[#006948] px-6 py-3 text-sm font-semibold tracking-[0.3em] text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  Создать план
+                </Link>
+              </motion.div>
             )
           ) : (
             <BlurFade inView delay={0.3}>
@@ -651,31 +716,42 @@ export default function BookingPage() {
           </BlurFade>
 
           <BlurFade inView delay={0.3}>
-            <div className="mb-8 flex flex-wrap gap-3">
+            <div className="mb-8 flex flex-wrap gap-3 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide" style={{ WebkitOverflowScrolling: 'touch' }}>
               {bookingCategories.map((category) => {
                 const Icon = category.icon;
+                const isActive = selectedCategory === category.id;
                 return (
-                  <button
+                  <motion.button
                     key={category.id}
                     onClick={() => setSelectedCategory(category.id)}
-                    className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold tracking-[0.2em] transition ${
-                      selectedCategory === category.id
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={`flex items-center gap-2 rounded-full px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-semibold tracking-[0.2em] transition-all duration-200 flex-shrink-0 ${
+                      isActive
                         ? "bg-[#006948] text-white shadow-lg"
-                        : "bg-white border border-[#006948]/20 text-[#006948] hover:border-[#006948]"
+                        : "bg-white border border-[#006948]/20 text-[#006948] hover:border-[#006948] hover:bg-[#F8FFFB]"
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span>{category.name}</span>
-                  </button>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{category.name}</span>
+                  </motion.button>
                 );
               })}
             </div>
           </BlurFade>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {recommendedItems[selectedCategory]?.map((item, index) => (
-              <BlurFade key={item.id} inView delay={0.4 + index * 0.05}>
-                <div className="rounded-3xl border border-[#006948]/20 bg-white p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col">
+          <AnimatePresence mode="wait">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {recommendedItems[selectedCategory]?.map((item, index) => (
+                <motion.div
+                  key={`${selectedCategory}-${item.id}`}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  transition={{ duration: 0.3, delay: index * 0.05 }}
+                  whileHover={{ y: -4 }}
+                  className="rounded-2xl sm:rounded-3xl border border-[#006948]/20 bg-white p-4 sm:p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col transition-all duration-300 hover:shadow-[0_0_60px_rgba(0,105,72,0.12)]"
+                >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-semibold tracking-[-0.05em] text-[#006948] truncate">
@@ -696,17 +772,29 @@ export default function BookingPage() {
                   <div className="flex items-center justify-between mb-4">
                     <span className="text-lg font-semibold text-[#006948]">{item.price}</span>
                   </div>
-                  <button
+                  <motion.button
                     onClick={() => handleBook(item)}
-                    className="w-full rounded-full bg-[#006948] hover:bg-[#008A6A] px-6 py-3 text-white text-sm font-semibold tracking-[0.2em] transition hover:-translate-y-0.5 hover:shadow-lg flex items-center justify-center gap-2"
+                    disabled={isBooking === item.id}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="w-full rounded-full bg-[#006948] hover:bg-[#008A6A] px-6 py-3 text-white text-sm font-semibold tracking-[0.2em] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    <span>Забронировать сейчас</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                </div>
-              </BlurFade>
-            ))}
-          </div>
+                    {isBooking === item.id ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Бронируем...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Забронировать сейчас</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </>
+                    )}
+                  </motion.button>
+                </motion.div>
+              ))}
+            </div>
+          </AnimatePresence>
         </div>
       </section>
 
@@ -743,34 +831,65 @@ export default function BookingPage() {
             </div>
           </BlurFade>
 
-          <div className="mb-6">
-            <div className="relative max-w-md">
-              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A]" />
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+            className="mb-6"
+          >
+            <div className="relative max-w-md w-full">
+              <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 text-[#7A7A7A] pointer-events-none" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={tripSearchQuery}
                 onChange={(e) => setTripSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setTripSearchQuery('');
+                  }
+                }}
                 placeholder="Поиск по маршрутам, городам, описанию..."
-                className="w-full pl-11 pr-4 py-3 rounded-full border border-[#006948]/20 bg-white text-[#0F2D1E] placeholder:text-[#93A39C] focus:outline-none focus:ring-2 focus:ring-[#006948] transition"
+                className="w-full pl-11 pr-10 py-3 rounded-full border border-[#006948]/20 bg-white text-[#0F2D1E] placeholder:text-[#93A39C] focus:outline-none focus:ring-2 focus:ring-[#006948] transition-all duration-200 shadow-sm hover:shadow-md"
+                aria-label="Поиск маршрутов"
               />
+              {tripSearchQuery && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
+                  onClick={() => setTripSearchQuery('')}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 rounded-full p-1 text-[#7A7A7A] hover:bg-[#F8FFFB] hover:text-[#006948] transition"
+                  aria-label="Очистить поиск"
+                >
+                  <X className="w-4 h-4" />
+                </motion.button>
+              )}
             </div>
-          </div>
+            {tripSearchQuery && (
+              <motion.p
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="mt-2 text-sm text-[#7A7A7A]"
+              >
+                Найдено маршрутов: {filteredTrips.length}
+              </motion.p>
+            )}
+          </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {readyTrips
-              .filter((trip) => {
-                if (!tripSearchQuery.trim()) return true;
-                const query = tripSearchQuery.toLowerCase();
-                return (
-                  trip.title.toLowerCase().includes(query) ||
-                  trip.city.toLowerCase().includes(query) ||
-                  trip.description.toLowerCase().includes(query) ||
-                  trip.locations.some((loc) => loc.name.toLowerCase().includes(query) || loc.type.toLowerCase().includes(query))
-                );
-              })
-              .map((trip, index) => (
-              <BlurFade key={trip.id} inView delay={0.3 + index * 0.05}>
-                <div className="rounded-3xl border border-[#006948]/20 bg-white p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col">
+          <AnimatePresence mode="wait">
+            {filteredTrips.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                {filteredTrips.map((trip, index) => (
+                  <motion.div
+                    key={trip.id}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -20 }}
+                    transition={{ duration: 0.3, delay: index * 0.05 }}
+                    whileHover={{ y: -4 }}
+                    className="rounded-2xl sm:rounded-3xl border border-[#006948]/20 bg-white p-4 sm:p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col transition-all duration-300 hover:shadow-[0_0_60px_rgba(0,105,72,0.12)]"
+                  >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0">
                       <h3 className="text-xl font-semibold tracking-[-0.05em] text-[#006948] truncate">
@@ -812,25 +931,54 @@ export default function BookingPage() {
                       </span>
                     )}
                   </div>
-                  <div className="flex gap-2 mt-auto">
-                    <button
-                      onClick={() => handleUseTrip(trip)}
-                      className="flex-1 rounded-full bg-[#006948] hover:bg-[#008A6A] px-4 py-2.5 text-white text-sm font-semibold tracking-[0.1em] transition hover:-translate-y-0.5 hover:shadow-lg flex items-center justify-center gap-2"
-                    >
-                      <Route className="w-4 h-4" />
-                      <span>Открыть маршрут</span>
-                    </button>
-                    <button
-                      onClick={() => handleBook({ id: trip.id, name: trip.title, category: "Трип", description: trip.description, rating: trip.rating, price: "", location: trip.city })}
-                      className="flex-shrink-0 rounded-full border-2 border-[#006948] hover:bg-[#006948] hover:text-white px-4 py-2.5 text-[#006948] text-sm font-semibold tracking-[0.1em] transition hover:-translate-y-0.5 flex items-center justify-center"
-                    >
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </BlurFade>
-            ))}
-          </div>
+                    <div className="flex gap-2 mt-auto">
+                      <motion.button
+                        onClick={() => handleUseTrip(trip)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 rounded-full bg-[#006948] hover:bg-[#008A6A] px-4 py-2.5 text-white text-sm font-semibold tracking-[0.1em] transition-all duration-200 flex items-center justify-center gap-2"
+                      >
+                        <Route className="w-4 h-4" />
+                        <span>Открыть маршрут</span>
+                      </motion.button>
+                      <motion.button
+                        onClick={() => handleBook({ id: trip.id, name: trip.title, category: "Трип", description: trip.description, rating: trip.rating, price: "", location: trip.city })}
+                        disabled={isBooking === trip.id}
+                        whileHover={{ scale: 1.05 }}
+                        whileTap={{ scale: 0.95 }}
+                        className="flex-shrink-0 rounded-full border-2 border-[#006948] hover:bg-[#006948] hover:text-white px-4 py-2.5 text-[#006948] text-sm font-semibold tracking-[0.1em] transition-all duration-200 flex items-center justify-center disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isBooking === trip.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <ArrowRight className="w-4 h-4" />
+                        )}
+                      </motion.button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-12 text-center col-span-full"
+              >
+                <Search className="w-12 h-12 text-[#006948]/30 mx-auto mb-4" />
+                <p className="text-lg font-semibold text-[#006948] mb-2">Ничего не найдено</p>
+                <p className="text-sm text-[#4A4A4A] mb-4">
+                  Попробуйте изменить запрос или очистить поиск
+                </p>
+                <button
+                  onClick={() => setTripSearchQuery('')}
+                  className="inline-flex items-center justify-center rounded-full bg-[#006948] px-6 py-3 text-sm font-semibold tracking-[0.3em] text-white transition hover:-translate-y-0.5 hover:shadow-lg"
+                >
+                  Очистить поиск
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </section>
     </main>

@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import { MapPinned, SendHorizonal, Search, FileText, Route, Calendar, Plus, Trash2, Star, Clock, Shield, AlertTriangle, Copy, Check, X, MessageSquare, List, Map, Image, XCircle } from 'lucide-react';
 import { AnimatePresence, motion, Variants } from 'framer-motion';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import type { LatLngExpression } from 'leaflet';
 import nextDynamic from 'next/dynamic';
 import type { Coordinates, RouteInstruction } from '@/lib/geo';
@@ -253,6 +253,10 @@ function PlansTab({
   selectedImage: string | null;
   setSelectedImage: (image: string | null) => void;
 }) {
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
   const sendButtonVariants: Variants = useMemo(
     () => ({
       hover: { scale: 1.05, boxShadow: '0 12px 30px rgba(0, 199, 127, 0.4)' },
@@ -262,9 +266,44 @@ function PlansTab({
     [],
   );
 
+  // Автоскролл при новых сообщениях
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, [messages, isGenerating]);
+
+  // Фокус на инпут при загрузке
+  useEffect(() => {
+    if (!isGenerating && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [isGenerating]);
+
+  // Обработка клавиатуры
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isGenerating && (inputValue.trim() || selectedImage)) {
+        handleSend(e as unknown as React.FormEvent<HTMLFormElement>);
+      }
+    }
+  }, [inputValue, selectedImage, isGenerating, handleSend]);
+
   return (
     <>
-      <div className="mt-3 flex-1 space-y-4 overflow-y-auto pr-2 lg:min-h-0">
+      <div ref={messagesContainerRef} className="mt-3 flex-1 space-y-4 overflow-y-auto pr-2 lg:min-h-0 scroll-smooth" style={{ WebkitOverflowScrolling: 'touch' }}>
+        {messages.length === 0 && !isGenerating && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-12 text-center"
+          >
+            <MessageSquare className="h-12 w-12 text-[#006948]/20 mb-4" />
+            <p className="text-sm text-[#7A7A7A] mb-2">Начните диалог с AI-гидом</p>
+            <p className="text-xs text-[#93A39C]">Задайте вопрос или опишите задачу</p>
+          </motion.div>
+        )}
         <AnimatePresence initial={false}>
           {messages.map((message) => (
             <motion.div
@@ -311,8 +350,8 @@ function PlansTab({
               className="flex justify-start"
             >
               <div className="flex items-center gap-2 rounded-2xl border border-[#006948]/10 bg-white px-4 py-3 text-[#3F4A46] shadow-sm">
-                <span className="text-xs font tracking-[0.-0.07em] text-[#00A36C]">Sayahat</span>
-                <div className="flex" aria-label="AI typing" role="status">
+                <span className="text-xs font-semibold tracking-[0.07em] text-[#00A36C]">Sayahat</span>
+                <div className="flex gap-1" aria-label="AI typing" role="status">
                   {[0, 1, 2].map((dot) => (
                     <motion.span
                       key={dot}
@@ -327,40 +366,52 @@ function PlansTab({
             </motion.div>
           )}
         </AnimatePresence>
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="mt-3">
         {showPrompts && (
-          <div className="rounded-xl border border-[#006948]/20 bg-gradient-to-br from-[#F8FFFB] to-white px-4 py-3 mb-4">
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="rounded-xl border border-[#006948]/20 bg-gradient-to-br from-[#F8FFFB] to-white px-4 py-3 mb-4"
+          >
             <p className="text-xs text-[#4A4A4A] leading-relaxed">
               <span className="font-semibold text-[#006948]">💡 Подсказка:</span> ИИ может автоматически создавать и сохранять ваши планы, заметки и маршруты. Просто попросите его сохранить план или заметку, и он запишет их автоматически.
             </p>
-          </div>
+          </motion.div>
         )}
 
         {selectedImage && (
-          <div className="mt-4 relative inline-block">
-            <div className="relative rounded-lg overflow-hidden border-2 border-[#006948]/20">
-              {}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="mt-4 relative inline-block"
+          >
+            <div className="relative rounded-lg overflow-hidden border-2 border-[#006948]/20 shadow-sm">
               <img 
                 src={selectedImage} 
                 alt="Предпросмотр" 
                 className="max-w-xs max-h-32 object-contain"
               />
-              <button
+              <motion.button
                 type="button"
                 onClick={() => setSelectedImage(null)}
-                className="absolute top-1 right-1 rounded-full bg-red-500 text-white p-1 hover:bg-red-600 transition"
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                className="absolute top-1 right-1 rounded-full bg-red-500 text-white p-1 hover:bg-red-600 transition shadow-lg"
                 aria-label="Удалить изображение"
               >
                 <XCircle className="w-4 h-4" />
-              </button>
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
         )}
         <form
           onSubmit={handleSend}
-          className="mt-4 flex items-center gap-3 rounded-xl border border-[#006948]/20 bg-white px-4 py-2"
+          className="mt-4 flex items-center gap-3 rounded-xl border border-[#006948]/20 bg-white px-4 py-2 shadow-sm transition-shadow hover:shadow-md"
         >
           <input
             type="file"
@@ -388,12 +439,15 @@ function PlansTab({
             <Image className="h-4 w-4" />
           </label>
           <input
+            ref={inputRef}
             type="text"
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder={selectedImage ? "Опишите изображение..." : "Опишите задачу на ближайший час"}
-            className="flex-1 bg-transparent text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20 rounded-lg px-2 transition"
             disabled={isGenerating}
+            aria-label="Введите сообщение"
           />
           <motion.button
             type="submit"
@@ -409,9 +463,19 @@ function PlansTab({
           </motion.button>
         </form>
         {chatError && (
-          <p className="mt-2 text-xs text-[#C5221F]" role="status" aria-live="polite">
-            {chatError}
-          </p>
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
+            role="alert"
+            aria-live="assertive"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              <span>{chatError}</span>
+            </div>
+          </motion.div>
         )}
       </div>
     </>
@@ -1634,6 +1698,20 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
   const [selectedCity, setSelectedCity] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Обработка Escape для закрытия модалки
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showCategoryModal) {
+        setShowCategoryModal(false);
+      }
+    };
+    if (showCategoryModal) {
+      document.addEventListener('keydown', handleEscape);
+      return () => document.removeEventListener('keydown', handleEscape);
+    }
+  }, [showCategoryModal]);
   const [searchResults, setSearchResults] = useState<Array<{
     id: string;
     name: string;
@@ -1871,14 +1949,22 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
         <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#93A39C] flex-shrink-0" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setSelectedCategory(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setSearchQuery('');
                 setSelectedCategory(null);
-              }}
-              placeholder="Например: ресторан в Алматы, музей в Шымкенте..."
-              className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20"
+              }
+            }}
+            placeholder="Например: ресторан в Алматы, музей в Шымкенте..."
+            className="w-full rounded-xl border border-[#006948]/20 bg-white px-10 py-3 text-sm text-[#0F2D1E] tracking-[-0.07em] placeholder:text-[#93A39C] focus:border-[#00A36C] focus:outline-none focus:ring-2 focus:ring-[#00A36C]/20 transition"
+            aria-label="Поиск мест"
           />
           {isSearching && (
             <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -1898,6 +1984,12 @@ function SearchTab({ onRouteBuild }: { onRouteBuild?: (route: RouteInstruction) 
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
             onClick={() => setShowCategoryModal(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setShowCategoryModal(false);
+              }
+            }}
+            tabIndex={-1}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -2585,7 +2677,7 @@ function AIGuidePageContent() {
     }
   }, [searchParams, position, router]);
 
-  const activeHelper = chatTabs.find((tab) => tab.id === activeTab)?.helper;
+  const activeHelper = useMemo(() => chatTabs.find((tab) => tab.id === activeTab)?.helper, [activeTab]);
 
   function detectUserIntent(text: string): { wantsPlan: boolean; wantsNote: boolean; content: string } {
     const lowerText = text.toLowerCase();
@@ -2629,7 +2721,7 @@ function AIGuidePageContent() {
     return { wantsPlan, wantsNote, content };
   }
 
-  async function handleSend(e: React.FormEvent<HTMLFormElement>) {
+  const handleSend = useCallback(async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const trimmed = inputValue.trim();
     if ((!trimmed && !selectedImage) || isGenerating) return;
@@ -2966,7 +3058,7 @@ function AIGuidePageContent() {
     } finally {
       setIsGenerating(false);
     }
-  }
+  }, [inputValue, selectedImage, isGenerating, messages, session, position, setMessages, setInputValue, setSelectedImage, setShowPrompts, setChatError, setIsGenerating, setRefreshTrigger]);
 
   return (
     <main className="min-h-screen bg-[#ffffff] pt-28 pb-6">
@@ -3012,25 +3104,27 @@ function AIGuidePageContent() {
             {}
             <div className="hidden lg:flex flex-wrap gap-2 pb-2">
               {chatTabs.map((tab) => (
-                <button
+                <motion.button
                   key={tab.id}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`rounded-sm px-5 py-2 text-xs font-semibold uppercase tracking-[-0.07em] transition ${
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className={`rounded-sm px-5 py-2 text-xs font-semibold uppercase tracking-[-0.07em] transition-all duration-200 ${
                     tab.id === activeTab
                       ? 'bg-[#006948] text-white shadow-[0_12px_30px_rgba(0,105,72,0.35)]'
-                      : 'border border-[#006948]/20 text-[#006948]'
+                      : 'border border-[#006948]/20 text-[#006948] hover:border-[#006948]/40 hover:bg-[#F4FFFA]'
                   }`}
                 >
                   {tab.label}
-                </button>
+                </motion.button>
               ))}
             </div>
 
-            <div className="mt-2 h-[60vh] overflow-hidden rounded-[24px] border border-[#006948]/15 bg-white p-4 lg:mt-4 lg:h-auto lg:flex-1 lg:overflow-hidden">
+            <div className="mt-2 h-[60vh] overflow-hidden rounded-[24px] border border-[#006948]/15 bg-white p-4 lg:mt-4 lg:h-auto lg:flex-1 lg:overflow-hidden touch-pan-y">
               <div className="flex h-full flex-col lg:min-h-0">
-                <div className="flex items-center gap-2 text-xs tracking-[-0.05em] text-[#7A7A7A]">
-                  <MapPinned className="h-4 w-4 text-[#00A36C]" />
+                <div className="flex items-center gap-2 text-xs tracking-[-0.05em] text-[#7A7A7A] mb-2 flex-shrink-0">
+                  <MapPinned className="h-4 w-4 text-[#00A36C] flex-shrink-0" />
                   <span className="tracking-[-0.07em] text-[#2A3C36]">{activeHelper}</span>
                 </div>
                 <AnimatePresence mode="wait">

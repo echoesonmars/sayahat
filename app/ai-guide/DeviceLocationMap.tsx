@@ -7,6 +7,7 @@ import { Circle, MapContainer, Marker, Popup, TileLayer, Polyline, useMap } from
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import L, { LatLngExpression } from 'leaflet';
+import { Navigation, ZoomIn, ZoomOut, Locate } from 'lucide-react';
 import type {} from 'leaflet-routing-machine';
 import type {
   Coordinates,
@@ -15,7 +16,16 @@ import type {
 } from '@/lib/geo';
 import { DEFAULT_CENTER_COORDS, computeRouteStats } from '@/lib/geo';
 
-type WindowWithLeaflet = Window & { L: typeof L };
+// Тип для события routesfound (библиотека имеет неполные типы)
+interface RoutesFoundEvent {
+  routes?: Array<{
+    coordinates?: L.LatLng[];
+    summary?: {
+      totalDistance?: number;
+      totalTime?: number;
+    };
+  }>;
+}
 
 type ContactLocation = {
   id: string;
@@ -29,6 +39,7 @@ type DeviceLocationMapProps = {
   hasError: boolean;
   routePlan?: RouteInstruction | null;
   contacts?: ContactLocation[];
+  onLocateClick?: () => void;
 };
 
 const defaultIcon = L.divIcon({
@@ -114,85 +125,197 @@ function MapRelocator({ position }: { position: LatLngExpression | null }) {
   return null;
 }
 
-type RoutingControl = L.Routing.Control;
-type RoutingControlOptionsWithMarker = L.Routing.RoutingControlOptions & {
-  createMarker?: (index: number, waypoint: L.Routing.Waypoint, total: number) => L.Marker | null;
-};
-
-function RoutingMachine({ waypoints }: { waypoints: LatLngExpression[] }) {
+// Компонент с кнопками управления картой
+function MapControls({ position, onLocateClick, hasDetails }: { position: LatLngExpression | null; onLocateClick?: () => void; hasDetails?: boolean }) {
   const map = useMap();
-  const routingControlRef = useRef<RoutingControl | null>(null);
+  const [isLocating, setIsLocating] = useState(false);
 
-  useEffect(() => {
-    return () => {
-      if (routingControlRef.current) {
-        map.removeControl(routingControlRef.current);
-        routingControlRef.current = null;
-      }
-    };
-  }, [map]);
+  const handleLocate = () => {
+    if (onLocateClick) {
+      onLocateClick();
+    }
+    
+    if (typeof window !== 'undefined' && navigator.geolocation) {
+      setIsLocating(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const loc: LatLngExpression = [pos.coords.latitude, pos.coords.longitude];
+          map.flyTo(loc, 15, { duration: 1.2 });
+          setIsLocating(false);
+        },
+        () => {
+          setIsLocating(false);
+          // Если есть сохраненная позиция, центрируем на ней
+          if (position) {
+            map.flyTo(position, 15, { duration: 1.2 });
+          }
+        },
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else if (position) {
+      // Если геолокация недоступна, используем переданную позицию
+      map.flyTo(position, 15, { duration: 1.2 });
+    }
+  };
+
+  const handleZoomIn = () => {
+    map.zoomIn();
+  };
+
+  const handleZoomOut = () => {
+    map.zoomOut();
+  };
+
+  // Адаптируем позицию в зависимости от наличия нижних панелей
+  // Используем более высокий отступ, чтобы кнопки не перекрывались с панелями
+  const bottomOffset = hasDetails ? 'bottom-32 sm:bottom-40' : 'bottom-4 sm:bottom-6';
+
+  return (
+    <div className={`absolute ${bottomOffset} right-3 sm:right-4 z-[1000] flex flex-col gap-2 pointer-events-auto`}>
+      {/* Кнопка определения локации */}
+      <button
+        type="button"
+        onClick={handleLocate}
+        disabled={isLocating}
+        className="rounded-full bg-white/95 hover:bg-white border border-[#006948]/20 shadow-lg p-3 transition-all duration-200 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Найти мою локацию"
+      >
+        {isLocating ? (
+          <Navigation className="w-5 h-5 text-[#006948] animate-spin" />
+        ) : (
+          <Locate className="w-5 h-5 text-[#006948]" />
+        )}
+      </button>
+
+      {/* Кнопки зума */}
+      <div className="flex flex-col gap-2 rounded-full bg-white/95 border border-[#006948]/20 shadow-lg p-1">
+        <button
+          type="button"
+          onClick={handleZoomIn}
+          className="rounded-full bg-transparent hover:bg-[#006948]/10 p-2 transition-all duration-200 hover:scale-110 active:scale-95"
+          title="Увеличить"
+        >
+          <ZoomIn className="w-4 h-4 text-[#006948]" />
+        </button>
+        <div className="h-px bg-[#006948]/20 mx-1" />
+        <button
+          type="button"
+          onClick={handleZoomOut}
+          className="rounded-full bg-transparent hover:bg-[#006948]/10 p-2 transition-all duration-200 hover:scale-110 active:scale-95"
+          title="Уменьшить"
+        >
+          <ZoomOut className="w-4 h-4 text-[#006948]" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Компонент для построения маршрута по дорогам
+function RoutingMachine({ waypoints, onRouteFound }: { waypoints: LatLngExpression[]; onRouteFound?: (coordinates: LatLngExpression[]) => void }) {
+  const map = useMap();
+  const routingControlRef = useRef<L.Routing.Control | null>(null);
 
   useEffect(() => {
     if (waypoints.length < 2) {
-      // Если нет достаточно точек, удаляем маршрут
-      if (routingControlRef.current) {
-        map.removeControl(routingControlRef.current);
-        routingControlRef.current = null;
-      }
+      console.log('[RoutingMachine] Недостаточно точек для маршрута:', waypoints.length);
       return;
-    }
-
-    if (typeof window !== 'undefined') {
-      (window as WindowWithLeaflet).L = L;
     }
 
     let isCancelled = false;
 
     (async () => {
-      await import('leaflet-routing-machine');
-      if (isCancelled || !L.Routing) return;
+      try {
+        await import('leaflet-routing-machine');
+        if (isCancelled || !L.Routing) return;
 
-      // Удаляем старый маршрут перед созданием нового
-      if (routingControlRef.current) {
-        map.removeControl(routingControlRef.current);
-        routingControlRef.current = null;
+        console.log('[RoutingMachine] 🚀 Начинаем построение маршрута');
+        console.log('[RoutingMachine] Количество точек:', waypoints.length);
+        console.log('[RoutingMachine] Точки:', waypoints);
+
+        // Удаляем старый маршрут
+        if (routingControlRef.current) {
+          try {
+            map.removeControl(routingControlRef.current);
+            console.log('[RoutingMachine] Старый маршрут удален');
+          } catch {
+            console.warn('[RoutingMachine] Ошибка при удалении старого маршрута');
+          }
+          routingControlRef.current = null;
+        }
+
+        const routingWaypoints = waypoints.map((point) => L.Routing.waypoint(L.latLng(point)));
+        console.log('[RoutingMachine] Waypoints для OSRM созданы:', routingWaypoints.length);
+
+        const routingOptions: L.Routing.RoutingControlOptions = {
+          waypoints: routingWaypoints,
+          router: L.Routing.osrmv1({ 
+            serviceUrl: 'https://router.project-osrm.org/route/v1',
+            timeout: 15000, // 15 секунд таймаут
+          }),
+          lineOptions: {
+            styles: [{ color: '#00A36C', weight: 6, opacity: 0.85 }],
+            extendToWaypoints: true,
+            missingRouteTolerance: 10,
+          },
+          addWaypoints: false,
+          fitSelectedRoutes: false,
+          show: false,
+          routeWhileDragging: false,
+          collapsible: false,
+        };
+
+        routingControlRef.current = L.Routing.control(routingOptions).addTo(map);
+        console.log('[RoutingMachine] ✓ Контроль маршрута добавлен на карту, запрос к OSRM API...');
+
+        // Обработка успешного построения
+        routingControlRef.current.on('routesfound', (e: RoutesFoundEvent) => {
+          if (isCancelled) return;
+          const routes = e.routes;
+          console.log('[RoutingMachine] ✓ ✓ ✓ МАРШРУТ ПО ДОРОГАМ ПОСТРОЕН!');
+          console.log('[RoutingMachine] Количество маршрутов:', routes?.length || 0);
+          if (routes && routes.length > 0) {
+            const route = routes[0];
+            console.log('[RoutingMachine] Координат в маршруте:', route.coordinates?.length || 0);
+            console.log('[RoutingMachine] Дистанция:', route.summary?.totalDistance, 'метров');
+            console.log('[RoutingMachine] Время:', route.summary?.totalTime, 'секунд');
+            if (route.coordinates && onRouteFound) {
+              const routeCoords: LatLngExpression[] = route.coordinates.map((coord: L.LatLng) => [coord.lat, coord.lng]);
+              console.log('[RoutingMachine] Передаем координаты маршрута в компонент');
+              onRouteFound(routeCoords);
+            }
+          }
+        });
+
+        // Обработка ошибок
+        routingControlRef.current.on('routingerror', (e: L.Routing.RoutingErrorEvent) => {
+          if (isCancelled) return;
+          console.error('[RoutingMachine] ✗ ✗ ✗ ОШИБКА ПОСТРОЕНИЯ МАРШРУТА');
+          console.error('[RoutingMachine] Сообщение:', e.error?.message);
+          console.error('[RoutingMachine] Статус:', e.error?.status);
+          console.error('[RoutingMachine] Полная ошибка:', e.error);
+        });
+
+      } catch (error) {
+        console.error('[RoutingMachine] ✗ Ошибка загрузки библиотеки:', error);
       }
-
-      const routingWaypoints: L.Routing.Waypoint[] = waypoints.map((point) => L.Routing.waypoint(L.latLng(point)));
-
-      const routingOptions: RoutingControlOptionsWithMarker = {
-        waypoints: routingWaypoints,
-        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1' }),
-        lineOptions: {
-          styles: [{ color: '#00A36C', weight: 5, opacity: 0.85 }],
-          extendToWaypoints: true,
-          missingRouteTolerance: 10,
-        },
-        addWaypoints: false,
-        fitSelectedRoutes: false,
-        show: false,
-        routeWhileDragging: false,
-        collapsible: true,
-        createMarker: () => null,
-      };
-
-      // Создаем новый маршрут
-      routingControlRef.current = L.Routing.control(routingOptions).addTo(map);
     })();
 
     return () => {
       isCancelled = true;
-      // Очищаем при размонтировании
       if (routingControlRef.current) {
-        map.removeControl(routingControlRef.current);
+        try {
+          map.removeControl(routingControlRef.current);
+        } catch {
+          // Игнорируем ошибки
+        }
         routingControlRef.current = null;
       }
     };
-  }, [map, waypoints]);
+  }, [waypoints, map, onRouteFound]);
 
   return null;
 }
-
 
 function normalizeLatLng(position: LatLngExpression | null): LatLngExpression | null {
   if (!position) return null;
@@ -293,11 +416,13 @@ function createContactIcon() {
   });
 }
 
-export function DeviceLocationMap({ position, isLocating, hasError, routePlan, contacts = [] }: DeviceLocationMapProps) {
+export function DeviceLocationMap({ position, isLocating, hasError, routePlan, contacts = [], onLocateClick }: DeviceLocationMapProps) {
   const normalizedPosition = normalizeLatLng(position);
   const userCoords = latLngToCoords(normalizedPosition) ?? DEFAULT_CENTER_COORDS;
   const hasRoute = Boolean(routePlan && routePlan.destination);
   const [panelsVisible, setPanelsVisible] = useState(true);
+  const [routePath, setRoutePath] = useState<LatLngExpression[]>([]);
+  const [isRoutingLoading, setIsRoutingLoading] = useState(false);
 
   useEffect(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -346,6 +471,22 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
   const showHints = panelsVisible && Boolean(routePlan?.hints?.length);
   const showDetails = panelsVisible && Boolean(routePlan?.note || routeStats);
 
+  // Сбрасываем состояние при изменении маршрута
+  useEffect(() => {
+    if (hasRoute) {
+      setRoutePath([]);
+      setIsRoutingLoading(true);
+      // Таймаут на случай, если маршрут не построится
+      const timeout = setTimeout(() => {
+        setIsRoutingLoading(false);
+      }, 15000); // 15 секунд максимум
+      return () => clearTimeout(timeout);
+    } else {
+      setRoutePath([]);
+      setIsRoutingLoading(false);
+    }
+  }, [hasRoute, routeAnimationKey]);
+
   return (
     <div className="relative h-full w-full overflow-hidden rounded-3xl border border-[#006948]/15 bg-[#F4FFFA] shadow-[0_25px_80px_rgba(0,105,72,0.08)] min-h-[420px] sm:min-h-[520px] lg:min-h-[360px]">
       <MapContainer
@@ -364,21 +505,46 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
         />
 
         <MapRelocator position={position} />
+        <MapControls position={position} onLocateClick={onLocateClick} hasDetails={showDetails} />
 
         {hasRoute && routedWaypoints.length >= 2 && (
           <>
-            <RoutingMachine key={routeAnimationKey} waypoints={routedWaypoints} />
-            <Polyline
+            <RoutingMachine 
               key={routeAnimationKey}
-              positions={routedWaypoints}
-              pathOptions={{
-                color: '#00C77F',
-                weight: 4,
-                opacity: 0.45,
-                dashArray: '8 10',
-                lineCap: 'round',
+              waypoints={routedWaypoints}
+              onRouteFound={(coordinates) => {
+                console.log('[DeviceLocationMap] Координаты маршрута получены:', coordinates.length);
+                setRoutePath(coordinates);
+                setIsRoutingLoading(false);
               }}
             />
+            {/* Показываем прямую линию пока строится маршрут или если он не построился */}
+            {(isRoutingLoading || routePath.length === 0) && (
+              <Polyline
+                positions={routedWaypoints}
+                pathOptions={{
+                  color: '#00A36C',
+                  weight: 4,
+                  opacity: 0.4,
+                  dashArray: '10 10',
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            )}
+            {/* Показываем маршрут по дорогам когда он построен */}
+            {routePath.length > 0 && (
+              <Polyline
+                positions={routePath}
+                pathOptions={{
+                  color: '#00A36C',
+                  weight: 6,
+                  opacity: 0.9,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                }}
+              />
+            )}
           </>
         )}
 
@@ -438,9 +604,22 @@ export function DeviceLocationMap({ position, isLocating, hasError, routePlan, c
 
       {/* Верхняя панель с кнопками и статусом */}
       <div className="absolute top-3 sm:top-4 left-3 sm:left-4 right-3 sm:right-4 z-[1000] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-3">
-        {/* Статус локации */}
+        {/* Статус локации и маршрута */}
         <div className="rounded-full bg-white/95 px-3 sm:px-4 py-1.5 sm:py-1 text-[10px] sm:text-[11px] font-semibold uppercase tracking-[0.25em] sm:tracking-[0.3em] text-[#006948] shadow-lg whitespace-nowrap">
-          {hasError ? 'не удалось получить геоданные' : isLocating ? 'определяем координаты...' : 'локация найдена'}
+          {isRoutingLoading ? (
+            <span className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 bg-[#00A36C] rounded-full animate-pulse"></span>
+              строим маршрут по дорогам...
+            </span>
+          ) : hasError ? (
+            'не удалось получить геоданные'
+          ) : isLocating ? (
+            'определяем координаты...'
+          ) : routePath.length > 0 ? (
+            '✓ маршрут построен'
+          ) : (
+            'локация найдена'
+          )}
         </div>
 
         {/* Кнопка показать/скрыть панели */}

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { BlurFade } from "@/components/ui/blur-fade";
 import { TextAnimate } from "@/components/ui/text-animate";
 import { useSession } from "next-auth/react";
-import { AlertCircle, Phone, MapPin, Users, Shield, Copy, Check, Plus, Trash2, Navigation, Stethoscope } from "lucide-react";
+import { AlertCircle, Phone, MapPin, Users, Shield, Copy, Check, Plus, Trash2, Navigation, Stethoscope, Loader2, X } from "lucide-react";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function SafetyPage() {
   const { data: session } = useSession();
@@ -21,10 +22,22 @@ export default function SafetyPage() {
     lastLocation: { lat: number; lng: number; timestamp: string } | null;
   }>>([]);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [isLoadingCode, setIsLoadingCode] = useState(true);
+  const [isLoadingContacts, setIsLoadingContacts] = useState(true);
+  const [isSendingSOS, setIsSendingSOS] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<{ contactId: string; contactName: string } | null>(null);
+  const [showSOSModal, setShowSOSModal] = useState<{ contactId: string; contactName: string } | null>(null);
+  const inputCodeRef = useRef<HTMLInputElement>(null);
 
   // Получаем уникальный код пользователя
   useEffect(() => {
     async function fetchSafetyCode() {
+      if (!session) {
+        setIsLoadingCode(false);
+        return;
+      }
+      setIsLoadingCode(true);
       try {
         const response = await fetch("/api/safety/code");
         if (response.ok) {
@@ -33,30 +46,47 @@ export default function SafetyPage() {
         }
       } catch (error) {
         console.error("Failed to fetch safety code", error);
+      } finally {
+        setIsLoadingCode(false);
       }
     }
-    if (session) {
-      fetchSafetyCode();
-    }
+    fetchSafetyCode();
   }, [session]);
 
   // Получаем список контактов
   useEffect(() => {
     async function fetchContacts() {
       if (!session) {
+        setIsLoadingContacts(false);
         return;
       }
+      setIsLoadingContacts(true);
       try {
-        const response = await fetch("/api/safety/contacts");
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        
+        const response = await fetch("/api/safety/contacts", {
+          signal: controller.signal,
+        });
+        
+        clearTimeout(timeoutId);
+        
         if (response.ok) {
           const data = await response.json();
           setContacts(data.contacts || []);
         }
       } catch (error) {
-        console.error("Failed to fetch contacts", error);
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error("Failed to fetch contacts", error);
+        }
+      } finally {
+        setIsLoadingContacts(false);
       }
     }
     fetchContacts();
+    
+    const interval = setInterval(fetchContacts, 10000);
+    return () => clearInterval(interval);
   }, [session]);
 
   // Отслеживание местоположения
@@ -90,17 +120,42 @@ export default function SafetyPage() {
     return () => clearInterval(interval);
   }, [session]);
 
-  const copyCode = () => {
+  const copyCode = useCallback(() => {
     if (safetyCode) {
       navigator.clipboard.writeText(safetyCode);
       setCodeCopied(true);
-      setTimeout(() => setCodeCopied(false), 2000);
+      setToast({ message: 'Код скопирован!', type: 'success' });
+      setTimeout(() => {
+        setCodeCopied(false);
+        setToast(null);
+      }, 2000);
     }
-  };
+  }, [safetyCode]);
 
-  const handleAddContact = async () => {
+  // Показываем toast уведомления
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  // Обработка Escape для закрытия модальных окон
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showDeleteModal) setShowDeleteModal(null);
+        if (showSOSModal) setShowSOSModal(null);
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [showDeleteModal, showSOSModal]);
+
+  const handleAddContact = useCallback(async () => {
     if (!inputCode.trim() || inputCode.length !== 6) {
-      alert("Введите 6-значный код");
+      setToast({ message: "Введите 6-значный код", type: 'error' });
+      inputCodeRef.current?.focus();
       return;
     }
 
@@ -116,26 +171,31 @@ export default function SafetyPage() {
 
       if (response.ok) {
         setInputCode("");
-        alert(`Контакт ${data.targetUserName || "добавлен"} успешно добавлен!`);
+        setToast({ message: `Контакт ${data.targetUserName || "добавлен"} успешно добавлен!`, type: 'success' });
         // Обновляем список контактов
         const contactsResponse = await fetch("/api/safety/contacts");
         if (contactsResponse.ok) {
           const contactsData = await contactsResponse.json();
           setContacts(contactsData.contacts || []);
         }
+        inputCodeRef.current?.focus();
       } else {
-        alert(data.error || "Ошибка при добавлении контакта");
+        setToast({ message: data.error || "Ошибка при добавлении контакта", type: 'error' });
       }
     } catch (error) {
       console.error("Failed to add contact", error);
-      alert("Ошибка при добавлении контакта");
+      setToast({ message: "Ошибка при добавлении контакта", type: 'error' });
     } finally {
       setIsAddingContact(false);
     }
-  };
+  }, [inputCode]);
 
-  const handleDeleteContact = async (contactId: string) => {
-    if (!confirm("Удалить этот контакт?")) return;
+  const handleDeleteContact = useCallback(async (contactId: string) => {
+    if (!showDeleteModal || showDeleteModal.contactId !== contactId) {
+      const contact = contacts.find(c => c._id === contactId);
+      setShowDeleteModal({ contactId, contactName: contact?.otherUser?.name || 'контакт' });
+      return;
+    }
 
     try {
       const response = await fetch(`/api/safety/contacts?id=${contactId}`, {
@@ -144,18 +204,25 @@ export default function SafetyPage() {
 
       if (response.ok) {
         setContacts((prev) => prev.filter((c) => c._id !== contactId));
+        setToast({ message: "Контакт удален", type: 'success' });
+        setShowDeleteModal(null);
       } else {
-        alert("Ошибка при удалении контакта");
+        setToast({ message: "Ошибка при удалении контакта", type: 'error' });
       }
     } catch (error) {
       console.error("Failed to delete contact", error);
-      alert("Ошибка при удалении контакта");
+      setToast({ message: "Ошибка при удалении контакта", type: 'error' });
     }
-  };
+  }, [contacts, showDeleteModal]);
 
-  const handleSOS = async (contactId: string) => {
-    if (!confirm("Отправить SOS сигнал выбранному контакту?")) return;
+  const handleSOS = useCallback(async (contactId: string) => {
+    if (!showSOSModal || showSOSModal.contactId !== contactId) {
+      const contact = contacts.find(c => c._id === contactId);
+      setShowSOSModal({ contactId, contactName: contact?.otherUser?.name || 'контакт' });
+      return;
+    }
 
+    setIsSendingSOS(contactId);
     try {
       const response = await fetch("/api/safety/sos", {
         method: "POST",
@@ -170,15 +237,18 @@ export default function SafetyPage() {
       const data = await response.json();
 
       if (response.ok) {
-        alert("SOS сигнал отправлен! Ваш контакт получит уведомление с вашим местоположением.");
+        setToast({ message: "SOS сигнал отправлен", type: 'success' });
+        setShowSOSModal(null);
       } else {
-        alert(data.error || "Ошибка при отправке SOS");
+        setToast({ message: data.error || "Ошибка при отправке SOS", type: 'error' });
       }
     } catch (error) {
       console.error("Failed to send SOS", error);
-      alert("Ошибка при отправке SOS");
+      setToast({ message: "Ошибка при отправке SOS", type: 'error' });
+    } finally {
+      setIsSendingSOS(null);
     }
-  };
+  }, [userLocation, contacts, showSOSModal]);
 
   const emergencyContacts = [
     { label: "Единый номер службы спасения", value: "112" },
@@ -187,7 +257,132 @@ export default function SafetyPage() {
   ];
 
   return (
-    <main className="min-h-screen bg-white">
+    <main className="min-h-screen bg-white relative">
+      {/* Toast Notifications */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: -50, x: "-50%" }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-1/2 transform -translate-x-1/2 z-[9999] rounded-2xl border border-[#006948]/20 bg-white px-6 py-4 shadow-[0_20px_60px_rgba(0,105,72,0.2)] max-w-md"
+          >
+            <div className={`flex items-center gap-3 ${toast.type === 'success' ? 'text-[#006948]' : 'text-red-600'}`}>
+              {toast.type === 'success' ? (
+                <Check className="w-5 h-5 flex-shrink-0" />
+              ) : (
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+              )}
+              <p className="text-sm font-medium">{toast.message}</p>
+              <button
+                onClick={() => setToast(null)}
+                className="ml-auto text-[#7A7A7A] hover:text-[#006948] transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {showDeleteModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowDeleteModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl border border-[#006948]/20 bg-white shadow-xl p-6"
+            >
+              <h3 className="text-xl font-semibold text-[#006948] mb-2">Удалить контакт?</h3>
+              <p className="text-sm text-[#4A4A4A] mb-6">
+                Удалить контакт <strong>{showDeleteModal.contactName}</strong>?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteModal(null)}
+                  className="flex-1 rounded-full border border-[#006948]/20 px-4 py-2 text-sm font-semibold text-[#006948] transition hover:bg-[#F8FFFB]"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => handleDeleteContact(showDeleteModal.contactId)}
+                  className="flex-1 rounded-full bg-red-600 hover:bg-red-700 px-4 py-2 text-sm font-semibold text-white transition"
+                >
+                  Удалить
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* SOS Confirmation Modal */}
+      <AnimatePresence>
+        {showSOSModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+            onClick={() => setShowSOSModal(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl border border-red-200 bg-white shadow-xl p-6"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center">
+                  <AlertCircle className="w-6 h-6 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-semibold text-[#006948]">Отправить SOS сигнал?</h3>
+                  <p className="text-sm text-[#7A7A7A]">Контакт: {showSOSModal.contactName}</p>
+                </div>
+              </div>
+              <p className="text-sm text-[#4A4A4A] mb-6">
+                Контакт получит уведомление с вашим местоположением
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowSOSModal(null)}
+                  className="flex-1 rounded-full border border-[#006948]/20 px-4 py-2 text-sm font-semibold text-[#006948] transition hover:bg-[#F8FFFB]"
+                >
+                  Отмена
+                </button>
+                <button
+                  onClick={() => handleSOS(showSOSModal.contactId)}
+                  disabled={isSendingSOS === showSOSModal.contactId}
+                  className="flex-1 rounded-full bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-sm font-semibold text-white transition flex items-center justify-center gap-2"
+                >
+                  {isSendingSOS === showSOSModal.contactId ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Отправка...</span>
+                    </>
+                  ) : (
+                    <>
+                      <AlertCircle className="w-4 h-4" />
+                      <span>Отправить SOS</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* Hero Section */}
       <section className="px-4 mt-[6rem] sm:px-6 lg:px-8 py-16 sm:py-24">
         <div className="mx-auto max-w-6xl">
@@ -217,7 +412,7 @@ export default function SafetyPage() {
                 delay={0.4}
                 className="mt-6 text-lg sm:text-xl tracking-[-0.03em] text-[#4A4A4A] max-w-3xl mx-auto"
               >
-                Платформа объединяет проверенные данные от МЧС, сервисов мониторинга дорог, авиакомпаний и местных гидов, чтобы каждая поездка по Казахстану оставалась комфортной.
+                Безопасность в каждой поездке
               </TextAnimate>
             </div>
           </BlurFade>
@@ -251,22 +446,26 @@ export default function SafetyPage() {
                     delay={0.2}
                     className="mt-4 text-lg sm:text-xl tracking-[-0.03em] text-white/90 leading-relaxed"
                   >
-                    В экстренных ситуациях наш ИИ-помощник предоставит пошаговые инструкции по оказанию первой помощи, подскажет ближайшие медицинские учреждения и поможет связаться с экстренными службами.
+                    Первая помощь, ближайшие медучреждения и экстренные службы
                   </TextAnimate>
                   <div className="mt-6 flex flex-col sm:flex-row gap-4">
-                    <Link
-                      href="/safety/ai-medic"
-                      className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold tracking-[0.3em] text-[#006948] transition hover:-translate-y-0.5 hover:shadow-lg whitespace-nowrap"
-                    >
-                      Открыть ИИ-Медик
-                    </Link>
-                    <a
+                    <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                      <Link
+                        href="/safety/ai-medic"
+                        className="inline-flex items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold tracking-[0.3em] text-[#006948] transition-all duration-200 hover:shadow-lg whitespace-nowrap"
+                      >
+                        Открыть ИИ-Медик
+                      </Link>
+                    </motion.div>
+                    <motion.a
                       href="tel:112"
-                      className="inline-flex items-center justify-center rounded-full border-2 border-white px-6 py-3 text-sm font-semibold tracking-[0.3em] text-white transition hover:bg-white/10 whitespace-nowrap"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="inline-flex items-center justify-center rounded-full border-2 border-white px-6 py-3 text-sm font-semibold tracking-[0.3em] text-white transition-all duration-200 hover:bg-white/10 whitespace-nowrap"
                     >
                       <Phone className="w-4 h-4 mr-2" />
                       Вызвать 112
-                    </a>
+                    </motion.a>
                   </div>
                 </div>
               </div>
@@ -304,7 +503,7 @@ export default function SafetyPage() {
                 delay={0.4}
                 className="mt-4 text-base sm:text-lg tracking-[-0.03em] text-[#4A4A4A] max-w-2xl mx-auto"
               >
-                Отправьте SOS сигнал вашим доверенным контактам. Они получат ваше точное местоположение и смогут быстро прийти на помощь.
+                Отправьте SOS контактам с вашим местоположением
               </TextAnimate>
             </div>
           </BlurFade>
@@ -312,11 +511,15 @@ export default function SafetyPage() {
           {session ? (
             <BlurFade inView delay={0.3}>
               {contacts.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {contacts.map((contact) => (
-                    <div
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                  {contacts.map((contact, index) => (
+                    <motion.div
                       key={contact._id}
-                      className="rounded-3xl border border-[#006948]/20 bg-white p-5 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3, delay: index * 0.05 }}
+                      whileHover={{ y: -4 }}
+                      className="rounded-2xl sm:rounded-3xl border border-[#006948]/20 bg-white p-4 sm:p-5 shadow-[0_0_40px_rgba(0,105,72,0.08)] flex flex-col transition-all duration-300 hover:shadow-[0_0_60px_rgba(0,105,72,0.12)]"
                     >
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1 min-w-0">
@@ -345,33 +548,55 @@ export default function SafetyPage() {
                           </span>
                         </div>
                       )}
-                      <button
+                      <motion.button
                         onClick={() => handleSOS(contact._id)}
-                        className="mt-auto w-full rounded-md bg-red-600 hover:bg-red-700 px-4 py-2 text-white text-sm font-semibold tracking-[0.1em] transition hover:-translate-y-0.5 hover:shadow-lg flex items-center justify-center gap-2"
+                        disabled={isSendingSOS === contact._id}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="mt-auto w-full rounded-md bg-red-600 hover:bg-red-700 disabled:opacity-60 disabled:cursor-not-allowed px-4 py-2 text-white text-sm font-semibold tracking-[0.1em] transition-all duration-200 flex items-center justify-center gap-2"
                       >
-                        <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                        <span>Отправить SOS</span>
-                      </button>
-                    </div>
+                        {isSendingSOS === contact._id ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+                            <span>Отправка...</span>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                            <span>Отправить SOS</span>
+                          </>
+                        )}
+                      </motion.button>
+                    </motion.div>
                   ))}
                 </div>
               ) : (
-                <div className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-8 text-center">
-                  <Users className="w-12 h-12 text-[#006948] mx-auto mb-4" />
-                  <p className="text-lg font-semibold text-[#006948] mb-2">Нет доверенных контактов</p>
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-8 text-center"
+                >
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                  >
+                    <Users className="w-12 h-12 text-[#006948] mx-auto mb-4" />
+                  </motion.div>
+                  <p className="text-lg font-semibold text-[#006948] mb-2">Нет контактов</p>
                   <p className="text-sm text-[#4A4A4A] mb-4">
-                    Добавьте контакты ниже, чтобы иметь возможность отправлять SOS сигналы
+                    Добавьте контакты ниже для отправки SOS
                   </p>
-                </div>
+                </motion.div>
               )}
             </BlurFade>
           ) : (
             <BlurFade inView delay={0.3}>
               <div className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-8 text-center">
                 <Shield className="w-12 h-12 text-[#006948] mx-auto mb-4" />
-                <p className="text-lg font-semibold text-[#006948] mb-2">Войдите для доступа к SOS</p>
+                <p className="text-lg font-semibold text-[#006948] mb-2">Войдите для доступа</p>
                 <p className="text-sm text-[#4A4A4A] mb-6">
-                  Войдите в аккаунт, чтобы использовать функцию SOS и делиться местоположением
+                  Войдите, чтобы использовать SOS и делиться местоположением
                 </p>
                 <Link
                   href="/auth/signin"
@@ -414,7 +639,7 @@ export default function SafetyPage() {
                 delay={0.4}
                 className="mt-4 text-base sm:text-lg tracking-[-0.03em] text-[#4A4A4A] max-w-2xl mx-auto"
               >
-                Добавьте доверенные контакты, чтобы они могли видеть ваше местоположение в реальном времени. Это поможет им быстро найти вас в случае необходимости.
+                Делитесь местоположением с доверенными контактами
               </TextAnimate>
             </div>
           </BlurFade>
@@ -429,28 +654,35 @@ export default function SafetyPage() {
                     <h3 className="text-lg font-semibold tracking-[-0.05em] text-[#006948]">Ваш код безопасности</h3>
                   </div>
                   <p className="text-sm text-[#4A4A4A] mb-4">
-                    Поделитесь этим кодом с теми, кому вы доверяете. Они смогут добавить вас в контакты и видеть ваше местоположение.
+                    Поделитесь кодом с доверенными контактами
                   </p>
-                  {safetyCode ? (
+                  {isLoadingCode ? (
+                    <div className="rounded-2xl bg-[#F8FFFB] border border-[#006948]/20 px-6 py-4 text-center mt-auto">
+                      <Loader2 className="w-5 h-5 text-[#006948] mx-auto animate-spin" />
+                      <p className="text-sm text-[#4A4A4A] mt-2">Загрузка кода...</p>
+                    </div>
+                  ) : safetyCode ? (
                     <div className="flex items-center gap-3 mt-auto">
-                      <div className="flex-1 rounded-2xl bg-[#F8FFFB] border border-[#006948]/20 px-6 py-4">
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 rounded-2xl bg-[#F8FFFB] border border-[#006948]/20 px-6 py-4"
+                      >
                         <p className="text-2xl font-mono font-bold tracking-wider text-[#006948] text-center">
                           {safetyCode}
                         </p>
-                      </div>
-                      <button
-                        onClick={copyCode}
-                        className="flex-shrink-0 rounded-full bg-[#006948] hover:bg-[#008A6A] p-4 text-white transition"
-                        aria-label="Копировать код"
-                      >
-                        {codeCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
-                      </button>
+                      </motion.div>
+                    <motion.button
+                      onClick={copyCode}
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      className="flex-shrink-0 rounded-full bg-[#006948] hover:bg-[#008A6A] p-4 text-white transition-all duration-200"
+                      aria-label="Копировать код"
+                    >
+                      {codeCopied ? <Check className="w-5 h-5" /> : <Copy className="w-5 h-5" />}
+                    </motion.button>
                     </div>
-                  ) : (
-                    <div className="rounded-2xl bg-[#F8FFFB] border border-[#006948]/20 px-6 py-4 text-center mt-auto">
-                      <p className="text-sm text-[#4A4A4A]">Загрузка кода...</p>
-                    </div>
-                  )}
+                  ) : null}
                 </div>
               </BlurFade>
 
@@ -462,7 +694,7 @@ export default function SafetyPage() {
                     <h3 className="text-lg font-semibold tracking-[-0.05em] text-[#006948]">Добавить контакт</h3>
                   </div>
                   <p className="text-sm text-[#4A4A4A] mb-4">
-                    Введите 6-значный код друга, чтобы видеть его местоположение и иметь возможность отправить ему SOS.
+                    Введите 6-значный код для добавления контакта
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 mt-auto">
                     <input
@@ -473,20 +705,25 @@ export default function SafetyPage() {
                       maxLength={6}
                       className="flex-1 rounded-2xl border border-[#006948]/20 bg-[#F8FFFB] px-4 py-3 text-center font-mono text-lg tracking-wider text-[#006948] focus:outline-none focus:ring-2 focus:ring-[#006948]"
                     />
-                    <button
+                    <motion.button
                       onClick={handleAddContact}
                       disabled={isAddingContact || !inputCode.trim()}
-                      className="flex-shrink-0 rounded-full bg-[#006948] hover:bg-[#008A6A] disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 text-white font-semibold transition hover:-translate-y-0.5 flex items-center justify-center gap-2 whitespace-nowrap"
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="flex-shrink-0 rounded-full bg-[#006948] hover:bg-[#008A6A] disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 text-white font-semibold transition-all duration-200 flex items-center justify-center gap-2 whitespace-nowrap"
                     >
                       {isAddingContact ? (
-                        "Добавление..."
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Добавление...</span>
+                        </>
                       ) : (
                         <>
                           <Plus className="w-4 h-4" />
-                          Добавить
+                          <span>Добавить</span>
                         </>
                       )}
-                    </button>
+                    </motion.button>
                   </div>
                 </div>
               </BlurFade>
@@ -495,9 +732,9 @@ export default function SafetyPage() {
             <BlurFade inView delay={0.3}>
               <div className="rounded-3xl border border-[#006948]/20 bg-[#F8FFFB] p-8 text-center">
                 <Navigation className="w-12 h-12 text-[#006948] mx-auto mb-4" />
-                <p className="text-lg font-semibold text-[#006948] mb-2">Войдите для обмена локацией</p>
+                <p className="text-lg font-semibold text-[#006948] mb-2">Войдите для доступа</p>
                 <p className="text-sm text-[#4A4A4A] mb-6">
-                  Войдите в аккаунт, чтобы добавить доверенные контакты и делиться местоположением
+                  Войдите, чтобы добавить контакты и делиться местоположением
                 </p>
                 <Link
                   href="/auth/signin"
@@ -510,15 +747,25 @@ export default function SafetyPage() {
           )}
 
           {/* Contacts List */}
-          {session && contacts.length > 0 && (
+          {session && (
             <BlurFade inView delay={0.5}>
               <div className="mt-8 rounded-3xl border border-[#006948]/20 bg-white p-5 sm:p-6 shadow-[0_0_40px_rgba(0,105,72,0.08)]">
                 <h3 className="text-lg font-semibold tracking-[-0.05em] text-[#006948] mb-4">Ваши контакты</h3>
+                {isLoadingContacts ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 text-[#006948] animate-spin" />
+                    <p className="ml-3 text-sm text-[#4A4A4A]">Загрузка контактов...</p>
+                  </div>
+                ) : contacts.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {contacts.map((contact) => (
-                    <div
+                  {contacts.map((contact, index) => (
+                    <motion.div
                       key={contact._id}
-                      className="rounded-2xl border border-[#006948]/10 bg-[#F8FFFB] p-3"
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2, delay: index * 0.03 }}
+                      whileHover={{ scale: 1.02 }}
+                      className="rounded-2xl border border-[#006948]/10 bg-[#F8FFFB] p-3 transition-all duration-200 hover:border-[#006948]/20 hover:shadow-sm"
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1 min-w-0">
@@ -538,18 +785,26 @@ export default function SafetyPage() {
                           )}
                         </div>
                         {contact.isOwner && (
-                          <button
+                          <motion.button
                             onClick={() => handleDeleteContact(contact._id)}
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
                             className="flex-shrink-0 text-[#7A7A7A] hover:text-red-600 transition ml-2"
                             aria-label="Удалить контакт"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          </motion.button>
                         )}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-[#006948]/30 mx-auto mb-4" />
+                    <p className="text-sm text-[#4A4A4A]">Пока нет добавленных контактов</p>
+                  </div>
+                )}
               </div>
             </BlurFade>
           )}
@@ -587,7 +842,7 @@ export default function SafetyPage() {
                     delay={0.4}
                     className="mt-4 text-base tracking-[-0.03em] text-[#4A4A4A]"
                   >
-                    Сохраните эти номера в быстрый набор. В экстренной ситуации каждая секунда на счету.
+                    Экстренные службы Казахстана
                   </TextAnimate>
                 </div>
                 <div className="rounded-[28px] border border-[#006948]/20 bg-white p-6">
@@ -596,19 +851,18 @@ export default function SafetyPage() {
                     {emergencyContacts.map((contact) => (
                       <div key={contact.label}>
                         <p className="text-sm text-[#7A7A7A] tracking-[-0.02em]">{contact.label}</p>
-                        <a
+                        <motion.a
                           href={`tel:${contact.value.replace(/\s/g, "")}`}
-                          className="text-2xl font-semibold tracking-[-0.04em] text-[#006948] hover:text-[#008A6A] transition flex items-center gap-2"
+                          whileHover={{ scale: 1.05 }}
+                          whileTap={{ scale: 0.95 }}
+                          className="text-2xl font-semibold tracking-[-0.04em] text-[#006948] hover:text-[#008A6A] transition-all duration-200 flex items-center gap-2"
                         >
                           <Phone className="w-4 h-4 flex-shrink-0" />
                           <span>{contact.value}</span>
-                        </a>
+                        </motion.a>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-6 text-xs uppercase tracking-[0.3em] text-[#7A7A7A]">
-                    Работает на русском, казахском и английском
-                  </p>
                 </div>
               </div>
             </div>
